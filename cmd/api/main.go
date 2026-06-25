@@ -4,7 +4,7 @@
 // @termsOfService  http://swagger.io/terms/
 
 // @contact.name   Shehan Suraweera
-// @contact.email  senujaambagalaa15@gmail.com
+// @contact.email  shehansurawera72@gmail.com
 
 // @license.name  MIT
 
