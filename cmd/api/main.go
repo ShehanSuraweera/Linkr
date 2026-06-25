@@ -14,6 +14,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/joho/godotenv"
+	"github.com/shehansuraweera/linkr/internal/clicks"
 	"github.com/shehansuraweera/linkr/internal/config"
 	apphttp "github.com/shehansuraweera/linkr/internal/http"
 	"github.com/shehansuraweera/linkr/internal/http/handler"
@@ -56,10 +57,20 @@ func main() {
 	linkRepo := repository.NewLinkRepo(pool)
 	clickRepo := repository.NewClickRepo(pool)
 
+	clickPipeline := clicks.NewPipeline(
+		clickRepo,
+		cfg.ClickBufferSize,
+		cfg.ClickBatchSize,
+		cfg.ClickWorkers,
+		cfg.ClickFlushInterval,
+		logger,
+	)
+	clickPipeline.Start()
+
 	h := apphttp.Handlers{
 		Auth:     handler.NewAuthHandler(userRepo, cfg.JWTSecret),
 		Link:     handler.NewLinkHandler(linkRepo, clickRepo),
-		Redirect: handler.NewRedirectHandler(linkRepo, clickRepo),
+		Redirect: handler.NewRedirectHandler(linkRepo, clickPipeline),
 	}
 
 	router := apphttp.NewRouter(h, cfg.JWTSecret, logger)
@@ -90,5 +101,8 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("shutdown error", "err", err)
 	}
+
+	// Stop the click pipeline after HTTP drains — workers flush their final batches.
+	clickPipeline.Stop()
 	logger.Info("server stopped")
 }

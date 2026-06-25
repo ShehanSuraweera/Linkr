@@ -11,14 +11,18 @@ import (
 	"github.com/shehansuraweera/linkr/internal/repository"
 )
 
-// RedirectHandler serves GET /{code} — the public hot path.
-// Click recording is synchronous here (Phase 3); Phase 4 swaps in async.
-type RedirectHandler struct {
-	links  *repository.LinkRepo
-	clicks *repository.ClickRepo
+// ClickEnqueuer is satisfied by *clicks.Pipeline.
+type ClickEnqueuer interface {
+	Enqueue(e domain.ClickEvent) bool
 }
 
-func NewRedirectHandler(links *repository.LinkRepo, clicks *repository.ClickRepo) *RedirectHandler {
+// RedirectHandler serves GET /{code} — the public hot path.
+type RedirectHandler struct {
+	links  *repository.LinkRepo
+	clicks ClickEnqueuer
+}
+
+func NewRedirectHandler(links *repository.LinkRepo, clicks ClickEnqueuer) *RedirectHandler {
 	return &RedirectHandler{links: links, clicks: clicks}
 }
 
@@ -48,15 +52,15 @@ func (h *RedirectHandler) Redirect(c *gin.Context) {
 		return
 	}
 
-	// Record click synchronously (replaced with async in Phase 4).
-	event := domain.ClickEvent{
+	// Enqueue click asynchronously — never blocks the redirect.
+	// If the queue is full the event is dropped gracefully (logged by the pipeline).
+	h.clicks.Enqueue(domain.ClickEvent{
 		LinkID:    link.ID,
 		At:        time.Now(),
 		IPHash:    hashIP(c.ClientIP()),
 		UserAgent: c.Request.UserAgent(),
 		Referer:   c.Request.Referer(),
-	}
-	_ = h.clicks.FlushBatch(c.Request.Context(), []domain.ClickEvent{event})
+	})
 
 	c.Redirect(http.StatusFound, link.OriginalURL)
 }
