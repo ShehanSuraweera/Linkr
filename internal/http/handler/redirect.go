@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"net/http"
@@ -8,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shehansuraweera/linkr/internal/domain"
-	"github.com/shehansuraweera/linkr/internal/repository"
 )
 
 // ClickEnqueuer is satisfied by *clicks.Pipeline.
@@ -16,20 +16,26 @@ type ClickEnqueuer interface {
 	Enqueue(e domain.ClickEvent) bool
 }
 
+// LinkLookup is satisfied by *service.LinkCache.
+type LinkLookup interface {
+	Get(ctx context.Context, code string) (domain.Link, error)
+}
+
 // RedirectHandler serves GET /{code} — the public hot path.
+// Most requests are served from the LRU cache with zero DB round-trips.
 type RedirectHandler struct {
-	links  *repository.LinkRepo
+	cache  LinkLookup
 	clicks ClickEnqueuer
 }
 
-func NewRedirectHandler(links *repository.LinkRepo, clicks ClickEnqueuer) *RedirectHandler {
-	return &RedirectHandler{links: links, clicks: clicks}
+func NewRedirectHandler(cache LinkLookup, clicks ClickEnqueuer) *RedirectHandler {
+	return &RedirectHandler{cache: cache, clicks: clicks}
 }
 
 func (h *RedirectHandler) Redirect(c *gin.Context) {
 	code := c.Param("code")
 
-	link, err := h.links.GetByCode(c.Request.Context(), code)
+	link, err := h.cache.Get(c.Request.Context(), code)
 	if err != nil {
 		if err == domain.ErrNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "link not found"})

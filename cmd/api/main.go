@@ -19,6 +19,7 @@ import (
 	apphttp "github.com/shehansuraweera/linkr/internal/http"
 	"github.com/shehansuraweera/linkr/internal/http/handler"
 	"github.com/shehansuraweera/linkr/internal/repository"
+	"github.com/shehansuraweera/linkr/internal/service"
 )
 
 func main() {
@@ -57,6 +58,12 @@ func main() {
 	linkRepo := repository.NewLinkRepo(pool)
 	clickRepo := repository.NewClickRepo(pool)
 
+	linkCache, err := service.NewLinkCache(linkRepo, cfg.CacheSize, logger)
+	if err != nil {
+		logger.Error("cache init", "err", err)
+		os.Exit(1)
+	}
+
 	clickPipeline := clicks.NewPipeline(
 		clickRepo,
 		cfg.ClickBufferSize,
@@ -70,7 +77,7 @@ func main() {
 	h := apphttp.Handlers{
 		Auth:     handler.NewAuthHandler(userRepo, cfg.JWTSecret),
 		Link:     handler.NewLinkHandler(linkRepo, clickRepo),
-		Redirect: handler.NewRedirectHandler(linkRepo, clickPipeline),
+		Redirect: handler.NewRedirectHandler(linkCache, clickPipeline),
 	}
 
 	router := apphttp.NewRouter(h, cfg.JWTSecret, logger)
