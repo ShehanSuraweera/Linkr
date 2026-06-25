@@ -1,0 +1,79 @@
+// Server-side API client — attaches the JWT from the httpOnly cookie.
+// Only used in Server Components and Route Handlers (never runs in the browser).
+import { cookies } from "next/headers"
+import type { Link, ListLinksResponse, LinkStats, TokenResponse } from "./types"
+
+const API_URL = process.env.API_URL!
+const COOKIE_NAME = process.env.JWT_COOKIE_NAME!
+
+async function getToken(): Promise<string | undefined> {
+  const store = await cookies()
+  return store.get(COOKIE_NAME)?.value
+}
+
+async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {},
+  token?: string
+): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: "Unknown error" }))
+    throw new ApiError(body.error ?? "Unknown error", res.status)
+  }
+
+  return res.json() as Promise<T>
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number
+  ) {
+    super(message)
+  }
+}
+
+// Auth
+export async function login(email: string, password: string): Promise<TokenResponse> {
+  return apiFetch<TokenResponse>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+export async function register(email: string, password: string): Promise<TokenResponse> {
+  return apiFetch<TokenResponse>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+// Links — require auth token from cookie
+export async function getLinks(cursor?: string): Promise<ListLinksResponse> {
+  const token = await getToken()
+  const qs = cursor ? `?cursor=${cursor}` : ""
+  return apiFetch<ListLinksResponse>(`/api/links${qs}`, {}, token)
+}
+
+export async function createLink(payload: {
+  url: string
+  alias?: string
+  expires_at?: string
+}): Promise<Link> {
+  const token = await getToken()
+  return apiFetch<Link>("/api/links", { method: "POST", body: JSON.stringify(payload) }, token)
+}
+
+export async function getLinkStats(code: string): Promise<LinkStats> {
+  const token = await getToken()
+  return apiFetch<LinkStats>(`/api/links/${code}/stats`, {}, token)
+}
