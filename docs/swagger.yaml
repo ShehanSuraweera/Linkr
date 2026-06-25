@@ -1,0 +1,306 @@
+basePath: /
+definitions:
+  domain.DailyClickStat:
+    properties:
+      count:
+        type: integer
+      day:
+        type: string
+    type: object
+  handler.CreateLinkRequest:
+    properties:
+      alias:
+        example: my-link
+        type: string
+      expires_at:
+        example: "2026-12-31T23:59:59Z"
+        type: string
+      url:
+        example: https://example.com/very/long/path
+        type: string
+    type: object
+  handler.ErrorResponse:
+    properties:
+      error:
+        example: invalid credentials
+        type: string
+    type: object
+  handler.LinkResponse:
+    properties:
+      created_at:
+        example: "2026-06-25T10:00:00Z"
+        type: string
+      expires_at:
+        example: "2026-12-31T23:59:59Z"
+        type: string
+      id:
+        example: 1
+        type: integer
+      is_active:
+        example: true
+        type: boolean
+      original_url:
+        example: https://example.com/very/long/path
+        type: string
+      short_code:
+        example: aB3xY7z
+        type: string
+    type: object
+  handler.ListLinksResponse:
+    properties:
+      has_more:
+        example: false
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/handler.LinkResponse'
+        type: array
+      next_cursor:
+        example: eyJjYSI6Ij...
+        type: string
+    type: object
+  handler.RegisterRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: s3cr3tpassword
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  handler.StatsResponse:
+    properties:
+      daily:
+        items:
+          $ref: '#/definitions/domain.DailyClickStat'
+        type: array
+      total_clicks:
+        example: 42
+        type: integer
+    type: object
+  handler.TokenResponse:
+    properties:
+      token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: senujaambagalaa15@gmail.com
+    name: Shehan Suraweera
+  description: A URL shortener with analytics. Redirect endpoint is public; all other
+    write/read endpoints require a Bearer JWT.
+  license:
+    name: MIT
+  termsOfService: http://swagger.io/terms/
+  title: Linkr API
+  version: "1.0"
+paths:
+  /{code}:
+    get:
+      description: Looks up the short code (LRU cache → DB on miss), records a click
+        asynchronously, and issues an HTTP 302. This endpoint is public — no auth
+        required.
+      parameters:
+      - description: Short code
+        example: aB3xY7z
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "302":
+          description: Redirects to the original URL
+        "404":
+          description: code not found or link deleted
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "410":
+          description: link expired or inactive
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Redirect to original URL
+      tags:
+      - redirect
+  /api/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Validates credentials and returns a signed JWT.
+      parameters:
+      - description: Credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "401":
+          description: invalid credentials
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Log in
+      tags:
+      - auth
+  /api/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a user account and returns a signed JWT.
+      parameters:
+      - description: Credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handler.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "409":
+          description: email already registered
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Register a new user
+      tags:
+      - auth
+  /api/links:
+    get:
+      description: Returns the authenticated user's links, newest first, with keyset
+        cursor pagination.
+      parameters:
+      - description: Page size (1-100, default 20)
+        example: 20
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from previous response
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.ListLinksResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List links
+      tags:
+      - links
+    post:
+      consumes:
+      - application/json
+      description: Generates a short code (or uses the supplied alias) and persists
+        the link. Requires auth.
+      parameters:
+      - description: Link to shorten
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateLinkRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handler.LinkResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "409":
+          description: alias already taken
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a short link
+      tags:
+      - links
+  /api/links/{code}/stats:
+    get:
+      description: Returns total clicks and a per-day breakdown. Served from the pre-aggregated
+        rollup table. Requires auth and ownership.
+      parameters:
+      - description: Short code
+        example: aB3xY7z
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.StatsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "403":
+          description: not the owner
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get click stats for a link
+      tags:
+      - links
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and the JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/shehansuraweera/linkr/internal/http/handler"
 	"github.com/shehansuraweera/linkr/internal/http/middleware"
 )
@@ -27,7 +29,10 @@ func NewRouter(h Handlers, jwtSecret string, logger *slog.Logger) *gin.Engine {
 	r.GET("/healthz", func(c *gin.Context) { c.Status(http.StatusOK) })
 	r.GET("/readyz", func(c *gin.Context) { c.Status(http.StatusOK) })
 
-	// Public redirect hot path.
+	// Swagger UI — available at /swagger/index.html
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// Public redirect hot path (must come after fixed routes to avoid shadowing /swagger/*).
 	r.GET("/:code", h.Redirect.Redirect)
 
 	// Auth endpoints (no JWT required).

@@ -32,6 +32,16 @@ func NewRedirectHandler(cache LinkLookup, clicks ClickEnqueuer) *RedirectHandler
 	return &RedirectHandler{cache: cache, clicks: clicks}
 }
 
+// Redirect godoc
+// @Summary      Redirect to original URL
+// @Description  Looks up the short code (LRU cache → DB on miss), records a click asynchronously, and issues an HTTP 302. This endpoint is public — no auth required.
+// @Tags         redirect
+// @Produce      json
+// @Param        code  path  string  true  "Short code"  example(aB3xY7z)
+// @Success      302   "Redirects to the original URL"
+// @Failure      404   {object}  ErrorResponse  "code not found or link deleted"
+// @Failure      410   {object}  ErrorResponse  "link expired or inactive"
+// @Router       /{code} [get]
 func (h *RedirectHandler) Redirect(c *gin.Context) {
 	code := c.Param("code")
 

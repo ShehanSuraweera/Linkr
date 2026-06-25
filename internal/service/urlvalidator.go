@@ -1,10 +1,12 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // ValidateURL checks scheme, structure, and guards against SSRF targets.
@@ -38,17 +40,19 @@ func ValidateURL(raw string) error {
 // blockPrivateHosts rejects localhost and RFC-1918/link-local/loopback ranges
 // to prevent the shortener from being used as an SSRF relay.
 func blockPrivateHosts(host string) error {
-	// Reject bare hostnames that are obviously local.
 	lower := strings.ToLower(host)
 	if lower == "localhost" || strings.HasSuffix(lower, ".local") ||
 		strings.HasSuffix(lower, ".internal") {
 		return fmt.Errorf("url target is not allowed")
 	}
 
-	ips, err := net.LookupHost(host)
+	// DNS lookup with a 3-second timeout so slow resolvers don't stall the request.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	ips, err := net.DefaultResolver.LookupHost(ctx, host)
 	if err != nil {
-		// If DNS fails we can't verify; allow it (fail open to avoid false positives).
-		// A production system might fail closed or use a safe DNS resolver.
+		// Fail open: if DNS is slow or unavailable, don't block valid URLs.
 		return nil
 	}
 

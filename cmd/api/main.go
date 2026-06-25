@@ -1,3 +1,21 @@
+// @title           Linkr API
+// @version         1.0
+// @description     A URL shortener with analytics. Redirect endpoint is public; all other write/read endpoints require a Bearer JWT.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   Shehan Suraweera
+// @contact.email  senujaambagalaa15@gmail.com
+
+// @license.name  MIT
+
+// @host      localhost:8080
+// @BasePath  /
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and the JWT token.
+
 package main
 
 import (
@@ -14,6 +32,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/joho/godotenv"
+	_ "github.com/shehansuraweera/linkr/docs"
 	"github.com/shehansuraweera/linkr/internal/clicks"
 	"github.com/shehansuraweera/linkr/internal/config"
 	apphttp "github.com/shehansuraweera/linkr/internal/http"

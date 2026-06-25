@@ -25,23 +25,38 @@ func NewLinkHandler(links *repository.LinkRepo, clicks *repository.ClickRepo) *L
 	return &LinkHandler{links: links, clicks: clicks}
 }
 
-type createLinkRequest struct {
-	URL       string `json:"url" binding:"required"`
-	Alias     string `json:"alias"`
-	ExpiresAt string `json:"expires_at"` // RFC3339 or empty
+// CreateLinkRequest is the request body for creating a short link.
+type CreateLinkRequest struct {
+	URL       string `json:"url"        example:"https://example.com/very/long/path"`
+	Alias     string `json:"alias"      example:"my-link"`
+	ExpiresAt string `json:"expires_at" example:"2026-12-31T23:59:59Z"`
 }
 
-type linkResponse struct {
-	ID          int64      `json:"id"`
-	ShortCode   string     `json:"short_code"`
-	OriginalURL string     `json:"original_url"`
-	CreatedAt   time.Time  `json:"created_at"`
-	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-	IsActive    bool       `json:"is_active"`
+// LinkResponse is a single link in API responses.
+type LinkResponse struct {
+	ID          int64      `json:"id"                    example:"1"`
+	ShortCode   string     `json:"short_code"            example:"aB3xY7z"`
+	OriginalURL string     `json:"original_url"          example:"https://example.com/very/long/path"`
+	CreatedAt   time.Time  `json:"created_at"            example:"2026-06-25T10:00:00Z"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"  example:"2026-12-31T23:59:59Z"`
+	IsActive    bool       `json:"is_active"             example:"true"`
 }
 
-func toLinkResponse(l domain.Link) linkResponse {
-	return linkResponse{
+// ListLinksResponse is the paginated list response.
+type ListLinksResponse struct {
+	Items      []LinkResponse `json:"items"`
+	HasMore    bool           `json:"has_more"              example:"false"`
+	NextCursor string         `json:"next_cursor,omitempty" example:"eyJjYSI6Ij..."`
+}
+
+// StatsResponse is the per-link click analytics response.
+type StatsResponse struct {
+	TotalClicks int64                  `json:"total_clicks" example:"42"`
+	Daily       []domain.DailyClickStat `json:"daily"`
+}
+
+func toLinkResponse(l domain.Link) LinkResponse {
+	return LinkResponse{
 		ID:          l.ID,
 		ShortCode:   l.ShortCode,
 		OriginalURL: l.OriginalURL,
@@ -51,13 +66,40 @@ func toLinkResponse(l domain.Link) linkResponse {
 	}
 }
 
+// CreateLink godoc
+// @Summary      Create a short link
+// @Description  Generates a short code (or uses the supplied alias) and persists the link. Requires auth.
+// @Tags         links
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      CreateLinkRequest  true  "Link to shorten"
+// @Success      201   {object}  LinkResponse
+// @Failure      400   {object}  ErrorResponse
+// @Failure      401   {object}  ErrorResponse
+// @Failure      409   {object}  ErrorResponse  "alias already taken"
+// @Router       /api/links [post]
 func (h *LinkHandler) Create(c *gin.Context) {
 	userID := middleware.UserIDFrom(c)
 
-	var req createLinkRequest
+	var req CreateLinkRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	if req.URL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "url is required"})
+		return
+	}
+
+	// Validate alias first — it's free. URL validation (DNS) comes after.
+	code := req.Alias
+	if code != "" {
+		if err := shortcode.ValidateAlias(code); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	if err := service.ValidateURL(req.URL); err != nil {
@@ -79,44 +121,38 @@ func (h *LinkHandler) Create(c *gin.Context) {
 		expiresAt = &t
 	}
 
-	code := req.Alias
 	if code != "" {
-		if err := shortcode.ValidateAlias(code); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		link, err := h.links.Create(c.Request.Context(), code, req.URL, userID, expiresAt)
+		if err != nil {
+			respondError(c, err)
 			return
 		}
-	} else {
-		var err error
-		for i := 0; i < 3; i++ {
-			code, err = shortcode.Generate()
-			if err != nil {
-				respondError(c, err)
-				return
-			}
-			link, createErr := h.links.Create(c.Request.Context(), code, req.URL, userID, expiresAt)
-			if createErr == nil {
-				c.JSON(http.StatusCreated, toLinkResponse(link))
-				return
-			}
-			if createErr != domain.ErrConflict {
-				respondError(c, createErr)
-				return
-			}
-			// collision — retry with a new code
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate unique code"})
+		c.JSON(http.StatusCreated, toLinkResponse(link))
 		return
 	}
 
-	link, err := h.links.Create(c.Request.Context(), code, req.URL, userID, expiresAt)
-	if err != nil {
-		respondError(c, err)
-		return
+	// Auto-generate code with collision retry.
+	for i := 0; i < 3; i++ {
+		var err error
+		code, err = shortcode.Generate()
+		if err != nil {
+			respondError(c, err)
+			return
+		}
+		link, createErr := h.links.Create(c.Request.Context(), code, req.URL, userID, expiresAt)
+		if createErr == nil {
+			c.JSON(http.StatusCreated, toLinkResponse(link))
+			return
+		}
+		if createErr != domain.ErrConflict {
+			respondError(c, createErr)
+			return
+		}
 	}
-	c.JSON(http.StatusCreated, toLinkResponse(link))
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate unique code"})
 }
 
-// cursor is an opaque base64-encoded JSON token for keyset pagination.
+// cursor is the opaque keyset pagination token.
 type cursor struct {
 	CreatedAt time.Time `json:"ca"`
 	ID        int64     `json:"id"`
@@ -139,6 +175,18 @@ func decodeCursor(s string) (time.Time, int64, error) {
 	return cur.CreatedAt, cur.ID, nil
 }
 
+// ListLinks godoc
+// @Summary      List links
+// @Description  Returns the authenticated user's links, newest first, with keyset cursor pagination.
+// @Tags         links
+// @Produce      json
+// @Security     BearerAuth
+// @Param        limit   query     int     false  "Page size (1-100, default 20)"  example(20)
+// @Param        cursor  query     string  false  "Opaque cursor from previous response"
+// @Success      200     {object}  ListLinksResponse
+// @Failure      400     {object}  ErrorResponse
+// @Failure      401     {object}  ErrorResponse
+// @Router       /api/links [get]
 func (h *LinkHandler) List(c *gin.Context) {
 	userID := middleware.UserIDFrom(c)
 
@@ -166,18 +214,30 @@ func (h *LinkHandler) List(c *gin.Context) {
 		return
 	}
 
-	items := make([]linkResponse, len(links))
+	items := make([]LinkResponse, len(links))
 	for i, l := range links {
 		items[i] = toLinkResponse(l)
 	}
 
-	resp := gin.H{"items": items, "has_more": hasMore}
+	resp := ListLinksResponse{Items: items, HasMore: hasMore}
 	if hasMore && len(links) > 0 {
-		resp["next_cursor"] = encodeCursor(links[len(links)-1])
+		resp.NextCursor = encodeCursor(links[len(links)-1])
 	}
 	c.JSON(http.StatusOK, resp)
 }
 
+// GetStats godoc
+// @Summary      Get click stats for a link
+// @Description  Returns total clicks and a per-day breakdown. Served from the pre-aggregated rollup table. Requires auth and ownership.
+// @Tags         links
+// @Produce      json
+// @Security     BearerAuth
+// @Param        code  path      string  true  "Short code"  example(aB3xY7z)
+// @Success      200   {object}  StatsResponse
+// @Failure      401   {object}  ErrorResponse
+// @Failure      403   {object}  ErrorResponse  "not the owner"
+// @Failure      404   {object}  ErrorResponse
+// @Router       /api/links/{code}/stats [get]
 func (h *LinkHandler) GetStats(c *gin.Context) {
 	userID := middleware.UserIDFrom(c)
 	code := c.Param("code")
@@ -197,5 +257,8 @@ func (h *LinkHandler) GetStats(c *gin.Context) {
 		respondError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, stats)
+	c.JSON(http.StatusOK, StatsResponse{
+		TotalClicks: stats.TotalClicks,
+		Daily:       stats.Daily,
+	})
 }
