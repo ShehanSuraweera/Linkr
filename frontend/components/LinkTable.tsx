@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query"
 import type { Link as LinkType, ListLinksResponse } from "@/lib/types"
 import CreateLinkForm from "./CreateLinkForm"
+import ConfirmModal from "./ConfirmModal"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -28,6 +29,11 @@ const SEARCH_DEBOUNCE_MS = 300
 const VIEW_STORAGE_KEY = "linkr_view"
 
 type ViewMode = "card" | "table"
+
+type PendingAction =
+  | { type: "delete"; link: LinkType }
+  | { type: "toggle"; link: LinkType }
+  | null
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -112,6 +118,7 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
   const [togglingId, setTogglingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [mutationError, setMutationError] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null)
 
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -418,8 +425,8 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
                   link={link}
                   copiedId={copiedId}
                   onCopy={copyLink}
-                  onToggle={toggleActive}
-                  onDelete={handleDelete}
+                  onToggle={(link) => setPendingAction({ type: "toggle", link })}
+                  onDelete={(id) => setPendingAction({ type: "delete", link: links.find((l) => l.id === id)! })}
                   isToggling={togglingId === link.id}
                   isDeleting={deletingId === link.id}
                 />
@@ -448,8 +455,8 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
                       link={link}
                       copiedId={copiedId}
                       onCopy={copyLink}
-                      onToggle={toggleActive}
-                      onDelete={handleDelete}
+                      onToggle={(link) => setPendingAction({ type: "toggle", link })}
+                      onDelete={(id) => setPendingAction({ type: "delete", link: links.find((l) => l.id === id)! })}
                       isToggling={togglingId === link.id}
                       isDeleting={deletingId === link.id}
                       onNavigate={() => router.push(`/links/${link.short_code}`)}
@@ -464,6 +471,38 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
       )}
 
       <CreateLinkForm open={dialogOpen} onOpenChange={setDialogOpen} onCreated={handleCreated} />
+
+      <ConfirmModal
+        open={pendingAction !== null}
+        onOpenChange={(open) => { if (!open) setPendingAction(null) }}
+        title={
+          pendingAction?.type === "delete"
+            ? "Delete link?"
+            : pendingAction?.link.is_active
+              ? "Deactivate link?"
+              : "Activate link?"
+        }
+        description={
+          pendingAction?.type === "delete"
+            ? `This will permanently delete /${pendingAction.link.short_code}. This action cannot be undone.`
+            : pendingAction?.link.is_active
+              ? "This link will stop redirecting visitors."
+              : "This link will start redirecting visitors."
+        }
+        confirmLabel={
+          pendingAction?.type === "delete"
+            ? "Delete"
+            : pendingAction?.link.is_active
+              ? "Deactivate"
+              : "Activate"
+        }
+        variant={pendingAction?.type === "delete" ? "destructive" : "default"}
+        onConfirm={() => {
+          if (!pendingAction) return
+          if (pendingAction.type === "delete") handleDelete(pendingAction.link.id)
+          else toggleActive(pendingAction.link)
+        }}
+      />
     </div>
   )
 }
@@ -488,28 +527,9 @@ function LinkCard({
   isDeleting: boolean
 }) {
   const router = useRouter()
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const shortUrl = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"}/${link.short_code}`
   const favicon = getFavicon(link.original_url)
   const hostname = getHostname(link.original_url)
-
-  // Auto-reset delete confirmation after 3 s
-  useEffect(() => {
-    if (!confirmDelete) return
-    const t = setTimeout(() => setConfirmDelete(false), 3000)
-    return () => clearTimeout(t)
-  }, [confirmDelete])
-
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    e.preventDefault()
-    if (confirmDelete) {
-      setConfirmDelete(false)
-      onDelete(link.id)
-    } else {
-      setConfirmDelete(true)
-    }
-  }
 
   return (
     <div
@@ -574,15 +594,10 @@ function LinkCard({
             <Power className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={handleDeleteClick}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(link.id) }}
             disabled={isDeleting}
-            title={confirmDelete ? "Click again to confirm" : "Delete"}
-            className={cn(
-              "p-1 rounded-md transition-colors",
-              confirmDelete
-                ? "text-destructive bg-destructive/10 hover:bg-destructive/20"
-                : "text-muted-foreground hover:text-destructive hover:bg-muted"
-            )}
+            title="Delete"
+            className="p-1 rounded-md transition-colors text-muted-foreground hover:text-destructive hover:bg-muted"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -613,24 +628,6 @@ function TableRowWithActions({
   isDeleting: boolean
   onNavigate: () => void
 }) {
-  const [confirmDelete, setConfirmDelete] = useState(false)
-
-  useEffect(() => {
-    if (!confirmDelete) return
-    const t = setTimeout(() => setConfirmDelete(false), 3000)
-    return () => clearTimeout(t)
-  }, [confirmDelete])
-
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (confirmDelete) {
-      setConfirmDelete(false)
-      onDelete(link.id)
-    } else {
-      setConfirmDelete(true)
-    }
-  }
-
   return (
     <TableRow className="group cursor-pointer" onClick={onNavigate}>
       <TableCell>
@@ -686,15 +683,10 @@ function TableRowWithActions({
             <Power className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={handleDeleteClick}
+            onClick={(e) => { e.stopPropagation(); onDelete(link.id) }}
             disabled={isDeleting}
-            title={confirmDelete ? "Click again to confirm" : "Delete"}
-            className={cn(
-              "p-1.5 rounded-md transition-colors",
-              confirmDelete
-                ? "text-destructive bg-destructive/10 hover:bg-destructive/20"
-                : "text-muted-foreground hover:text-destructive hover:bg-muted"
-            )}
+            title="Delete"
+            className="p-1.5 rounded-md transition-colors text-muted-foreground hover:text-destructive hover:bg-muted"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
