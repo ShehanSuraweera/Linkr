@@ -579,7 +579,7 @@ function LinkCard({
         </span>
         <span className="text-[11px] text-muted-foreground/70">{formatDate(link.created_at)}</span>
         {/* Action buttons — visible on hover */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5">
+        <div className="flex items-center gap-1 opacity-100 transition-opacity mt-0.5">
           <button
             onClick={(e) => { e.stopPropagation(); e.preventDefault(); onToggle(link) }}
             disabled={isToggling}
@@ -668,7 +668,7 @@ function TableRowWithActions({
         </span>
       </TableCell>
       <TableCell>
-        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity">
           <button
             onClick={(e) => { e.stopPropagation(); onToggle(link) }}
             disabled={isToggling}
