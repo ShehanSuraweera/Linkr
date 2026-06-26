@@ -74,16 +74,8 @@ func (r *ClickRepo) FlushBatch(ctx context.Context, batch []domain.ClickEvent) e
 }
 
 // GetStats returns total clicks and per-day breakdown for a link.
+// Total is derived by summing the daily rows — one round-trip instead of two.
 func (r *ClickRepo) GetStats(ctx context.Context, linkID int64) (domain.LinkStats, error) {
-	// Total from rollup — O(days), not O(clicks).
-	var total int64
-	err := r.pool.QueryRow(ctx,
-		`SELECT COALESCE(SUM(count), 0) FROM click_daily WHERE link_id = $1`, linkID).
-		Scan(&total)
-	if err != nil {
-		return domain.LinkStats{}, fmt.Errorf("stats total: %w", err)
-	}
-
 	rows, err := r.pool.Query(ctx,
 		`SELECT to_char(day, 'YYYY-MM-DD') AS day, count
 		 FROM click_daily WHERE link_id = $1
@@ -94,6 +86,11 @@ func (r *ClickRepo) GetStats(ctx context.Context, linkID int64) (domain.LinkStat
 	daily, err := pgx.CollectRows(rows, pgx.RowToStructByName[domain.DailyClickStat])
 	if err != nil {
 		return domain.LinkStats{}, fmt.Errorf("stats daily scan: %w", err)
+	}
+
+	var total int64
+	for _, d := range daily {
+		total += d.Count
 	}
 
 	return domain.LinkStats{TotalClicks: total, Daily: daily}, nil

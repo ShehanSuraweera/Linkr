@@ -93,7 +93,7 @@ func TestLinkRepo_CreateListDelete(t *testing.T) {
 		t.Errorf("got ID %d, want %d", got.ID, link.ID)
 	}
 
-	links, hasMore, err := linkRepo.List(ctx, user.ID, time.Time{}, 0, 10)
+	links, hasMore, err := linkRepo.List(ctx, user.ID, time.Time{}, 0, 10, "")
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

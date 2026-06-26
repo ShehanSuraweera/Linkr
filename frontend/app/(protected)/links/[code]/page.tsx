@@ -1,6 +1,8 @@
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import StatsContent from "@/components/StatsContent"
+import { getLinkStats } from "@/lib/api"
+import type { LinkStats } from "@/lib/types"
 
 export default async function StatsPage({
   params,
@@ -8,6 +10,13 @@ export default async function StatsPage({
   params: Promise<{ code: string }>
 }) {
   const { code } = await params
+
+  let initialStats: LinkStats | undefined
+  try {
+    initialStats = await getLinkStats(code)
+  } catch {
+    // Let StatsContent handle the error (404, 403, network, etc.)
+  }
 
   return (
     <div className="space-y-6">
@@ -23,7 +32,7 @@ export default async function StatsPage({
         <span className="text-sm font-semibold">Stats for /{code}</span>
       </div>
 
-      <StatsContent code={code} />
+      <StatsContent code={code} initialStats={initialStats} />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
 import type { LinkStats } from "@/lib/types"
 import ClicksChart from "@/components/ClicksChart"
 import { Card, CardContent } from "@/components/ui/card"
@@ -11,13 +12,20 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
 
 interface Props {
   code: string
+  initialStats?: LinkStats
 }
 
-export default function StatsContent({ code }: Props) {
+export default function StatsContent({ code, initialStats }: Props) {
+  const router = useRouter()
+
   const { data: stats, isLoading, isError, error, refetch, isRefetching } = useQuery<LinkStats>({
     queryKey: ["stats", code],
     queryFn: async () => {
       const res = await fetch(`/api/links-proxy/${code}/stats`)
+      if (res.status === 401) {
+        router.push("/login")
+        throw new Error("Session expired")
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw Object.assign(new Error(body.error ?? "Failed to fetch stats"), {
@@ -26,6 +34,7 @@ export default function StatsContent({ code }: Props) {
       }
       return res.json()
     },
+    initialData: initialStats,
     staleTime: 30_000,
   })
 
