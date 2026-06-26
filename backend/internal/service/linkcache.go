@@ -4,34 +4,33 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
-	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/shehansuraweera/linkr/internal/domain"
 	"github.com/shehansuraweera/linkr/internal/repository"
 )
 
-// LinkCache wraps the link repository with an in-process LRU cache.
-// On a cache hit the redirect serves with zero DB round-trips.
-// singleflight collapses concurrent misses for the same code into one DB read.
+// LinkCache wraps the link repository with an in-process expirable LRU cache.
+// Used when no Redis is configured (single-instance deployments).
 //
-// Scale note: this cache is per-instance. With multiple API replicas each
-// has its own cache — a mutation (delete/pause) only invalidates locally.
-// The next step is a shared Redis cache or short TTLs. Documented in DECISIONS.md.
+// TTL bounds stale data so deleted/updated links expire from cache within ttl,
+// rather than living until evicted by size pressure (the old behaviour).
 type LinkCache struct {
-	cache  *lru.Cache[string, domain.Link]
+	cache  *expirable.LRU[string, domain.Link]
 	links  *repository.LinkRepo
 	group  singleflight.Group
 	logger *slog.Logger
 }
 
-func NewLinkCache(links *repository.LinkRepo, size int, logger *slog.Logger) (*LinkCache, error) {
-	c, err := lru.New[string, domain.Link](size)
-	if err != nil {
-		return nil, fmt.Errorf("create lru cache: %w", err)
+func NewLinkCache(links *repository.LinkRepo, size int, ttl time.Duration, logger *slog.Logger) (*LinkCache, error) {
+	if size <= 0 {
+		return nil, fmt.Errorf("cache size must be > 0, got %d", size)
 	}
-	return &LinkCache{cache: c, links: links, logger: logger}, nil
+	cache := expirable.NewLRU[string, domain.Link](size, nil, ttl)
+	return &LinkCache{cache: cache, links: links, logger: logger}, nil
 }
 
 // Get returns the link for code, using the cache and singleflight.
@@ -40,7 +39,6 @@ func (lc *LinkCache) Get(ctx context.Context, code string) (domain.Link, error) 
 		return link, nil
 	}
 
-	// Deduplicate concurrent misses for the same code.
 	v, err, _ := lc.group.Do(code, func() (any, error) {
 		link, err := lc.links.GetByCode(ctx, code)
 		if err != nil {
