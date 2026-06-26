@@ -32,13 +32,16 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	_ "github.com/shehansuraweera/linkr/docs"
 	"github.com/shehansuraweera/linkr/internal/clicks"
 	"github.com/shehansuraweera/linkr/internal/config"
 	apphttp "github.com/shehansuraweera/linkr/internal/http"
 	"github.com/shehansuraweera/linkr/internal/http/handler"
+	"github.com/shehansuraweera/linkr/internal/http/middleware"
 	"github.com/shehansuraweera/linkr/internal/repository"
 	"github.com/shehansuraweera/linkr/internal/service"
+	"github.com/shehansuraweera/linkr/internal/usecase"
 )
 
 func main() {
@@ -77,10 +80,39 @@ func main() {
 	linkRepo := repository.NewLinkRepo(pool)
 	clickRepo := repository.NewClickRepo(pool)
 
-	linkCache, err := service.NewLinkCache(linkRepo, cfg.CacheSize, logger)
-	if err != nil {
-		logger.Error("cache init", "err", err)
-		os.Exit(1)
+	// Connect to Redis once — shared by the cache and the rate limiter.
+	// nil means Redis is unavailable; both subsystems fall back gracefully.
+	redisClient := connectRedis(cfg, logger)
+	if redisClient != nil {
+		defer redisClient.Close()
+	}
+
+	// Cache selection:
+	//   Redis available → TieredCache (L1 expirable LRU + L2 Redis + L3 PostgreSQL)
+	//                     circuit breaker skips Redis after 5 consecutive failures
+	//   Redis absent    → plain expirable LRU → PostgreSQL
+	var linkLookup handler.LinkLookup
+	if redisClient != nil {
+		rc := service.NewRedisCache(linkRepo, redisClient, cfg.RedisCacheTTL, logger)
+		tc, tcErr := service.NewTieredCache(cfg.CacheSize, cfg.L1CacheTTL, rc, logger)
+		if tcErr != nil {
+			logger.Error("tiered cache init", "err", tcErr)
+			os.Exit(1)
+		}
+		linkLookup = tc
+		logger.Info("cache: tiered LRU+Redis",
+			"l1_size", cfg.CacheSize,
+			"l1_ttl", cfg.L1CacheTTL,
+			"redis_ttl", cfg.RedisCacheTTL,
+		)
+	} else {
+		lc, lcErr := service.NewLinkCache(linkRepo, cfg.CacheSize, cfg.L1CacheTTL, logger)
+		if lcErr != nil {
+			logger.Error("lru cache init", "err", lcErr)
+			os.Exit(1)
+		}
+		linkLookup = lc
+		logger.Info("cache: in-process LRU", "size", cfg.CacheSize, "ttl", cfg.L1CacheTTL)
 	}
 
 	clickPipeline := clicks.NewPipeline(
@@ -93,13 +125,32 @@ func main() {
 	)
 	clickPipeline.Start()
 
+	middleware.RegisterClickQueueGauge(clickPipeline.QueueDepth)
+
+	linkUC := usecase.NewLinkUsecase(linkRepo, clickRepo)
+	authUC := usecase.NewAuthUsecase(userRepo, cfg.JWTSecret)
+
 	h := apphttp.Handlers{
-		Auth:     handler.NewAuthHandler(userRepo, cfg.JWTSecret),
-		Link:     handler.NewLinkHandler(linkRepo, clickRepo),
-		Redirect: handler.NewRedirectHandler(linkCache, clickPipeline),
+		Auth:     handler.NewAuthHandler(authUC),
+		Link:     handler.NewLinkHandler(linkUC),
+		Redirect: handler.NewRedirectHandler(linkLookup, clickPipeline, cfg.CacheControlMaxAge),
 	}
 
-	router := apphttp.NewRouter(h, cfg.JWTSecret, logger)
+	// readyz pings the DB — used by Kubernetes readiness probes.
+	ready := func() error {
+		rctx, rcancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer rcancel()
+		return pool.Ping(rctx)
+	}
+
+	// Rate limiter: Redis-backed (global across replicas) when Redis is available,
+	// per-instance token bucket otherwise.
+	rateLimiter := middleware.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, redisClient)
+
+	router := apphttp.NewRouter(h, apphttp.RouterConfig{
+		JWTSecret: cfg.JWTSecret,
+		RateLimit: rateLimiter,
+	}, logger, ready)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),
@@ -128,7 +179,33 @@ func main() {
 		logger.Error("shutdown error", "err", err)
 	}
 
-	// Stop the click pipeline after HTTP drains — workers flush their final batches.
 	clickPipeline.Stop()
 	logger.Info("server stopped")
+}
+
+// connectRedis parses the URL, sets short timeouts, pings, and returns the
+// client. Returns nil (with a warning log) if Redis is unavailable so the
+// caller can fall back gracefully instead of crashing.
+func connectRedis(cfg *config.Config, logger *slog.Logger) *redis.Client {
+	if cfg.RedisURL == "" {
+		return nil
+	}
+	opts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		logger.Warn("invalid REDIS_URL, Redis disabled", "err", err)
+		return nil
+	}
+	opts.DialTimeout  = 1 * time.Second
+	opts.ReadTimeout  = 500 * time.Millisecond
+	opts.WriteTimeout = 500 * time.Millisecond
+
+	client := redis.NewClient(opts)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		logger.Warn("redis unreachable, falling back to LRU", "err", err)
+		_ = client.Close()
+		return nil
+	}
+	return client
 }

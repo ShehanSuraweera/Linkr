@@ -19,6 +19,17 @@ type Config struct {
 	ClickWorkers      int
 	DBMaxConns        int32
 	DBMinConns        int32
+	// Distributed cache — if empty the in-process LRU is used instead.
+	RedisURL          string
+	RedisCacheTTL     time.Duration
+	// L1 per-instance TTL when running with Redis. Short enough to bound
+	// stale data across replicas; long enough to absorb repeated bursts.
+	L1CacheTTL        time.Duration
+	// Rate limiting (per IP, token bucket).
+	RateLimitRPS      float64
+	RateLimitBurst    int
+	// Redirect Cache-Control max-age in seconds (0 = no header sent).
+	CacheControlMaxAge int
 }
 
 func Load() (*Config, error) {
@@ -34,6 +45,12 @@ func Load() (*Config, error) {
 		ClickWorkers:      getEnvInt("CLICK_WORKERS", 4),
 		DBMaxConns:        int32(getEnvInt("DB_MAX_CONNS", 25)),
 		DBMinConns:        int32(getEnvInt("DB_MIN_CONNS", 5)),
+		RedisURL:          getEnv("REDIS_URL", ""),
+		RedisCacheTTL:     time.Duration(getEnvInt("REDIS_CACHE_TTL_SEC", 300)) * time.Second,
+		L1CacheTTL:        time.Duration(getEnvInt("L1_CACHE_TTL_SEC", 30)) * time.Second,
+		RateLimitRPS:      float64(getEnvInt("RATE_LIMIT_RPS", 100)),
+		RateLimitBurst:    getEnvInt("RATE_LIMIT_BURST", 200),
+		CacheControlMaxAge: getEnvInt("CACHE_CONTROL_MAX_AGE_SEC", 60),
 	}
 
 	if c.DatabaseURL == "" {

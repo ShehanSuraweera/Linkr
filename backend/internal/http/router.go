@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/shehansuraweera/linkr/internal/http/handler"
@@ -17,17 +18,35 @@ type Handlers struct {
 	Redirect *handler.RedirectHandler
 }
 
-func NewRouter(h Handlers, jwtSecret string, logger *slog.Logger) *gin.Engine {
+// RouterConfig holds the values NewRouter needs from the app config.
+// RateLimit is a pre-built middleware so the router never imports Redis.
+type RouterConfig struct {
+	JWTSecret string
+	RateLimit gin.HandlerFunc
+}
+
+func NewRouter(h Handlers, cfg RouterConfig, logger *slog.Logger, ready func() error) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger(logger))
 	r.Use(middleware.Recovery(logger))
+	r.Use(middleware.Metrics())
+	r.Use(cfg.RateLimit)
 
-	// Health endpoints (no auth).
+	// Health endpoints (no auth, no rate limit — Kubernetes probes these).
 	r.GET("/healthz", func(c *gin.Context) { c.Status(http.StatusOK) })
-	r.GET("/readyz", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/readyz", func(c *gin.Context) {
+		if err := ready(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "db unavailable"})
+			return
+		}
+		c.Status(http.StatusOK)
+	})
+
+	// Prometheus metrics scrape endpoint.
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Swagger UI — available at /swagger/index.html
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -43,7 +62,7 @@ func NewRouter(h Handlers, jwtSecret string, logger *slog.Logger) *gin.Engine {
 	}
 
 	// Protected API endpoints.
-	api := r.Group("/api", middleware.JWT(jwtSecret))
+	api := r.Group("/api", middleware.JWT(cfg.JWTSecret))
 	{
 		api.POST("/links", h.Link.Create)
 		api.GET("/links", h.Link.List)
