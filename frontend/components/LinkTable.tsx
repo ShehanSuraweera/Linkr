@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query"
 import Link from "next/link"
@@ -15,9 +15,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Copy, Check, BarChart2, Link2, RefreshCw } from "lucide-react"
+import { Copy, Check, BarChart2, Link2, RefreshCw, Search, X } from "lucide-react"
+import { Input } from "@/components/ui/input"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+
+const PAGE_SIZE = 20
+const SEARCH_DEBOUNCE_MS = 300
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(id)
+  }, [value, delay])
+  return debounced
+}
 
 interface Props {
   initialLinks: LinkType[]
@@ -29,9 +42,15 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
   const queryClient = useQueryClient()
   const [copiedId, setCopiedId] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS)
 
   const searchParams = useSearchParams()
   const router = useRouter()
+
+  const redirectToLogin = useCallback(() => {
+    router.push("/login")
+  }, [router])
 
   useEffect(() => {
     if (searchParams.get("new") === "1") {
@@ -45,27 +64,34 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
     refetch,
     isRefetching,
   } = useInfiniteQuery({
-    queryKey: ["links"],
+    queryKey: ["links", debouncedSearch],
     queryFn: async ({ pageParam }: { pageParam: string | null }) => {
-      const url = pageParam ? `/api/links?cursor=${pageParam}` : "/api/links"
-      const res = await fetch(url)
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
+      if (pageParam) params.set("cursor", pageParam)
+      if (debouncedSearch) params.set("q", debouncedSearch)
+      const res = await fetch(`/api/links?${params}`)
+      if (res.status === 401) {
+        redirectToLogin()
+        throw new Error("Session expired")
+      }
       if (!res.ok) throw new Error("Failed to fetch links")
       return res.json() as Promise<ListLinksResponse>
     },
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) =>
       lastPage.has_more && lastPage.next_cursor ? lastPage.next_cursor : null,
-    initialData: {
+    initialData: debouncedSearch ? undefined : {
       pages: [{ items: initialLinks, has_more: initialHasMore, next_cursor: initialNextCursor }],
       pageParams: [null],
     },
     staleTime: 30_000,
   })
 
-  const links = data.pages.flatMap((p) => p.items)
+  const links = data?.pages.flatMap((p) => p.items) ?? []
 
   const handleCreated = (link: LinkType) => {
     queryClient.setQueryData<InfiniteData<ListLinksResponse>>(["links"], (old) => {
@@ -111,19 +137,52 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
         </div>
       </div>
 
+      <div className="relative">
+        {isFetching && debouncedSearch ? (
+          <RefreshCw className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
+        ) : (
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        )}
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by URL or short code…"
+          className="pl-9 pr-9"
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="Clear search"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
       {links.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 rounded-xl border border-dashed bg-muted/20">
           <div className="p-3 rounded-full bg-muted mb-4">
             <Link2Icon />
           </div>
-          <p className="font-semibold text-foreground">No links yet</p>
-          <p className="text-sm text-muted-foreground mt-1 mb-5">
-            Create your first short link to get started.
-          </p>
-          <Button className="gap-1.5" onClick={() => setDialogOpen(true)}>
-            <Link2 className="h-4 w-4" />
-            Create link
-          </Button>
+          {debouncedSearch ? (
+            <>
+              <p className="font-semibold text-foreground">No results for &ldquo;{debouncedSearch}&rdquo;</p>
+              <p className="text-sm text-muted-foreground mt-1 mb-5">Try a different URL or short code.</p>
+              <Button variant="outline" size="sm" onClick={() => setSearch("")}>Clear search</Button>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold text-foreground">No links yet</p>
+              <p className="text-sm text-muted-foreground mt-1 mb-5">
+                Create your first short link to get started.
+              </p>
+              <Button className="gap-1.5" onClick={() => setDialogOpen(true)}>
+                <Link2 className="h-4 w-4" />
+                Create link
+              </Button>
+            </>
+          )}
         </div>
       ) : (
         <div className="rounded-xl border overflow-hidden">

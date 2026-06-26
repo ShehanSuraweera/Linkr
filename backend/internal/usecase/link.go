@@ -18,7 +18,7 @@ import (
 type LinkStore interface {
 	Create(ctx context.Context, shortCode, originalURL string, userID int64, expiresAt *time.Time) (domain.Link, error)
 	GetByCode(ctx context.Context, code string) (domain.Link, error)
-	List(ctx context.Context, userID int64, cursorCreatedAt time.Time, cursorID int64, limit int32) ([]domain.LinkSummary, bool, error)
+	List(ctx context.Context, userID int64, cursorCreatedAt time.Time, cursorID int64, limit int32, search string) ([]domain.LinkSummary, bool, error)
 }
 
 // ClickStore is the read-only analytics interface required by LinkUsecase.
@@ -97,9 +97,9 @@ func (uc *LinkUsecase) Create(ctx context.Context, in CreateLinkInput) (domain.L
 	return domain.Link{}, fmt.Errorf("could not generate unique code")
 }
 
-// List delegates pagination to the repository.
-func (uc *LinkUsecase) List(ctx context.Context, userID int64, cursorCreatedAt time.Time, cursorID int64, limit int32) ([]domain.LinkSummary, bool, error) {
-	return uc.links.List(ctx, userID, cursorCreatedAt, cursorID, limit)
+// List delegates pagination and search to the repository.
+func (uc *LinkUsecase) List(ctx context.Context, userID int64, cursorCreatedAt time.Time, cursorID int64, limit int32, search string) ([]domain.LinkSummary, bool, error) {
+	return uc.links.List(ctx, userID, cursorCreatedAt, cursorID, limit, search)
 }
 
 // GetStats returns click analytics for a link, enforcing that the caller owns it.

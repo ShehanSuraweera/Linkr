@@ -4,7 +4,10 @@ import { getLinks, createLink } from "@/lib/api"
 export async function GET(req: NextRequest) {
   try {
     const cursor = req.nextUrl.searchParams.get("cursor") ?? undefined
-    const data = await getLinks(cursor)
+    const limitParam = req.nextUrl.searchParams.get("limit")
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined
+    const q = req.nextUrl.searchParams.get("q") ?? undefined
+    const data = await getLinks(cursor, limit, q)
     return NextResponse.json(data)
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to fetch links"

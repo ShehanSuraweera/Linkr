@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -171,7 +172,9 @@ func (h *LinkHandler) List(c *gin.Context) {
 		}
 	}
 
-	links, hasMore, err := h.uc.List(c.Request.Context(), userID, cursorCreatedAt, cursorID, int32(limit))
+	search := strings.TrimSpace(c.Query("q"))
+
+	links, hasMore, err := h.uc.List(c.Request.Context(), userID, cursorCreatedAt, cursorID, int32(limit), search)
 	if err != nil {
 		respondError(c, err)
 		return

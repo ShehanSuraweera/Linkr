@@ -60,7 +60,8 @@ func (r *LinkRepo) GetByCode(ctx context.Context, code string) (domain.Link, err
 // List returns links for userID using keyset pagination over (created_at DESC, id DESC).
 // Returns LinkSummary (entity + aggregate click count) to avoid N+1 stats queries.
 // Pass zero values for cursorCreatedAt/cursorID to get the first page.
-func (r *LinkRepo) List(ctx context.Context, userID int64, cursorCreatedAt time.Time, cursorID int64, limit int32) ([]domain.LinkSummary, bool, error) {
+// search filters by original_url or short_code via trigram ILIKE; empty string = no filter.
+func (r *LinkRepo) List(ctx context.Context, userID int64, cursorCreatedAt time.Time, cursorID int64, limit int32, search string) ([]domain.LinkSummary, bool, error) {
 	if cursorCreatedAt.IsZero() {
 		cursorCreatedAt = time.Now().Add(time.Second) // slightly future so first row is included
 		cursorID = 1<<62 - 1                          // max int64-ish
@@ -74,10 +75,11 @@ func (r *LinkRepo) List(ctx context.Context, userID int64, cursorCreatedAt time.
 		 WHERE l.user_id = $1
 		   AND l.deleted_at IS NULL
 		   AND (l.created_at, l.id) < ($2, $3)
+		   AND ($4 = '' OR l.original_url ILIKE '%' || $4 || '%' OR l.short_code ILIKE '%' || $4 || '%')
 		 GROUP BY l.id, l.short_code, l.original_url, l.user_id, l.created_at, l.expires_at, l.is_active, l.deleted_at
 		 ORDER BY l.created_at DESC, l.id DESC
-		 LIMIT $4`,
-		userID, cursorCreatedAt, cursorID, limit+1)
+		 LIMIT $5`,
+		userID, cursorCreatedAt, cursorID, search, limit+1)
 	if err != nil {
 		return nil, false, fmt.Errorf("list links: %w", err)
 	}

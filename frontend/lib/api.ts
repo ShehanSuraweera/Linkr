@@ -58,9 +58,13 @@ export async function register(email: string, password: string): Promise<TokenRe
 }
 
 // Links — require auth token from cookie
-export async function getLinks(cursor?: string): Promise<ListLinksResponse> {
+export async function getLinks(cursor?: string, limit?: number, q?: string): Promise<ListLinksResponse> {
   const token = await getToken()
-  const qs = cursor ? `?cursor=${cursor}` : ""
+  const params = new URLSearchParams()
+  if (cursor) params.set("cursor", cursor)
+  if (limit) params.set("limit", String(limit))
+  if (q) params.set("q", q)
+  const qs = params.size ? `?${params}` : ""
   return apiFetch<ListLinksResponse>(`/api/links${qs}`, {}, token)
 }
 
