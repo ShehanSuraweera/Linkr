@@ -12,8 +12,12 @@ func respondError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+	case errors.Is(err, domain.ErrAliasTaken):
+		c.JSON(http.StatusConflict, gin.H{"error": "alias already taken"})
 	case errors.Is(err, domain.ErrConflict):
 		c.JSON(http.StatusConflict, gin.H{"error": "already exists"})
+	case errors.Is(err, domain.ErrForbidden):
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 	case errors.Is(err, domain.ErrUnauthorized):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 	case errors.Is(err, domain.ErrInvalidInput):

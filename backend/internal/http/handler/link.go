@@ -11,18 +11,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shehansuraweera/linkr/internal/domain"
 	"github.com/shehansuraweera/linkr/internal/http/middleware"
-	"github.com/shehansuraweera/linkr/internal/repository"
-	"github.com/shehansuraweera/linkr/internal/service"
-	"github.com/shehansuraweera/linkr/internal/shortcode"
+	"github.com/shehansuraweera/linkr/internal/usecase"
 )
 
 type LinkHandler struct {
-	links  *repository.LinkRepo
-	clicks *repository.ClickRepo
+	uc *usecase.LinkUsecase
 }
 
-func NewLinkHandler(links *repository.LinkRepo, clicks *repository.ClickRepo) *LinkHandler {
-	return &LinkHandler{links: links, clicks: clicks}
+func NewLinkHandler(uc *usecase.LinkUsecase) *LinkHandler {
+	return &LinkHandler{uc: uc}
 }
 
 // CreateLinkRequest is the request body for creating a short link.
@@ -40,6 +37,7 @@ type LinkResponse struct {
 	CreatedAt   time.Time  `json:"created_at"            example:"2026-06-25T10:00:00Z"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"  example:"2026-12-31T23:59:59Z"`
 	IsActive    bool       `json:"is_active"             example:"true"`
+	TotalClicks int64      `json:"total_clicks"          example:"42"`
 }
 
 // ListLinksResponse is the paginated list response.
@@ -51,7 +49,7 @@ type ListLinksResponse struct {
 
 // StatsResponse is the per-link click analytics response.
 type StatsResponse struct {
-	TotalClicks int64                  `json:"total_clicks" example:"42"`
+	TotalClicks int64                   `json:"total_clicks" example:"42"`
 	Daily       []domain.DailyClickStat `json:"daily"`
 }
 
@@ -64,6 +62,12 @@ func toLinkResponse(l domain.Link) LinkResponse {
 		ExpiresAt:   l.ExpiresAt,
 		IsActive:    l.IsActive,
 	}
+}
+
+func toLinkSummaryResponse(s domain.LinkSummary) LinkResponse {
+	r := toLinkResponse(s.Link)
+	r.TotalClicks = s.TotalClicks
+	return r
 }
 
 // CreateLink godoc
@@ -88,25 +92,6 @@ func (h *LinkHandler) Create(c *gin.Context) {
 		return
 	}
 
-	if req.URL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "url is required"})
-		return
-	}
-
-	// Validate alias first — it's free. URL validation (DNS) comes after.
-	code := req.Alias
-	if code != "" {
-		if err := shortcode.ValidateAlias(code); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-	}
-
-	if err := service.ValidateURL(req.URL); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
 	var expiresAt *time.Time
 	if req.ExpiresAt != "" {
 		t, err := time.Parse(time.RFC3339, req.ExpiresAt)
@@ -114,42 +99,20 @@ func (h *LinkHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "expires_at must be RFC3339"})
 			return
 		}
-		if t.Before(time.Now()) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "expires_at must be in the future"})
-			return
-		}
 		expiresAt = &t
 	}
 
-	if code != "" {
-		link, err := h.links.Create(c.Request.Context(), code, req.URL, userID, expiresAt)
-		if err != nil {
-			respondError(c, err)
-			return
-		}
-		c.JSON(http.StatusCreated, toLinkResponse(link))
+	link, err := h.uc.Create(c.Request.Context(), usecase.CreateLinkInput{
+		URL:       req.URL,
+		Alias:     req.Alias,
+		ExpiresAt: expiresAt,
+		UserID:    userID,
+	})
+	if err != nil {
+		respondError(c, err)
 		return
 	}
-
-	// Auto-generate code with collision retry.
-	for i := 0; i < 3; i++ {
-		var err error
-		code, err = shortcode.Generate()
-		if err != nil {
-			respondError(c, err)
-			return
-		}
-		link, createErr := h.links.Create(c.Request.Context(), code, req.URL, userID, expiresAt)
-		if createErr == nil {
-			c.JSON(http.StatusCreated, toLinkResponse(link))
-			return
-		}
-		if createErr != domain.ErrConflict {
-			respondError(c, createErr)
-			return
-		}
-	}
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate unique code"})
+	c.JSON(http.StatusCreated, toLinkResponse(link))
 }
 
 // cursor is the opaque keyset pagination token.
@@ -208,7 +171,7 @@ func (h *LinkHandler) List(c *gin.Context) {
 		}
 	}
 
-	links, hasMore, err := h.links.List(c.Request.Context(), userID, cursorCreatedAt, cursorID, int32(limit))
+	links, hasMore, err := h.uc.List(c.Request.Context(), userID, cursorCreatedAt, cursorID, int32(limit))
 	if err != nil {
 		respondError(c, err)
 		return
@@ -216,12 +179,12 @@ func (h *LinkHandler) List(c *gin.Context) {
 
 	items := make([]LinkResponse, len(links))
 	for i, l := range links {
-		items[i] = toLinkResponse(l)
+		items[i] = toLinkSummaryResponse(l)
 	}
 
 	resp := ListLinksResponse{Items: items, HasMore: hasMore}
 	if hasMore && len(links) > 0 {
-		resp.NextCursor = encodeCursor(links[len(links)-1])
+		resp.NextCursor = encodeCursor(links[len(links)-1].Link)
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -242,17 +205,7 @@ func (h *LinkHandler) GetStats(c *gin.Context) {
 	userID := middleware.UserIDFrom(c)
 	code := c.Param("code")
 
-	link, err := h.links.GetByCode(c.Request.Context(), code)
-	if err != nil {
-		respondError(c, err)
-		return
-	}
-	if link.UserID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
-		return
-	}
-
-	stats, err := h.clicks.GetStats(c.Request.Context(), link.ID)
+	stats, err := h.uc.GetStats(c.Request.Context(), code, userID)
 	if err != nil {
 		respondError(c, err)
 		return

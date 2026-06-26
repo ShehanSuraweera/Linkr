@@ -1,27 +1,26 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shehansuraweera/linkr/internal/auth"
 	"github.com/shehansuraweera/linkr/internal/domain"
-	"github.com/shehansuraweera/linkr/internal/repository"
+	"github.com/shehansuraweera/linkr/internal/usecase"
 )
 
 type AuthHandler struct {
-	users     *repository.UserRepo
-	jwtSecret string
+	uc *usecase.AuthUsecase
 }
 
-func NewAuthHandler(users *repository.UserRepo, jwtSecret string) *AuthHandler {
-	return &AuthHandler{users: users, jwtSecret: jwtSecret}
+func NewAuthHandler(uc *usecase.AuthUsecase) *AuthHandler {
+	return &AuthHandler{uc: uc}
 }
 
 // RegisterRequest is the request body for register and login.
 type RegisterRequest struct {
 	Email    string `json:"email" binding:"required,email" example:"user@example.com"`
-	Password string `json:"password" binding:"required,min=8" example:"s3cr3tpassword"`
+	Password string `json:"password" binding:"required" example:"s3cr3tpassword"`
 }
 
 // TokenResponse is returned on successful register or login.
@@ -52,25 +51,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	hash, err := auth.HashPassword(req.Password)
+	user, token, err := h.uc.Register(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
-
-	user, err := h.users.Create(c.Request.Context(), req.Email, hash)
-	if err != nil {
-		respondError(c, err)
-		return
-	}
-
-	token, err := auth.IssueToken(user.ID, h.jwtSecret)
-	if err != nil {
-		respondError(c, err)
-		return
-	}
-
 	c.JSON(http.StatusCreated, TokenResponse{Token: token, UserID: user.ID})
 }
 
@@ -91,27 +76,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	user, err := h.users.GetByEmail(c.Request.Context(), req.Email)
+	user, token, err := h.uc.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		if err == domain.ErrNotFound {
+		if errors.Is(err, domain.ErrUnauthorized) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 			return
 		}
 		respondError(c, err)
 		return
 	}
-
-	if err := auth.CheckPassword(user.PasswordHash, req.Password); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
-		return
-	}
-
-	token, err := auth.IssueToken(user.ID, h.jwtSecret)
-	if err != nil {
-		respondError(c, err)
-		return
-	}
-
 	c.JSON(http.StatusOK, TokenResponse{Token: token, UserID: user.ID})
 }

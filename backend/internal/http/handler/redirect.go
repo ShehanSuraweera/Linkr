@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -22,14 +23,15 @@ type LinkLookup interface {
 }
 
 // RedirectHandler serves GET /{code} — the public hot path.
-// Most requests are served from the LRU cache with zero DB round-trips.
+// Most requests are served from the LRU/Redis cache with zero DB round-trips.
 type RedirectHandler struct {
-	cache  LinkLookup
-	clicks ClickEnqueuer
+	cache          LinkLookup
+	clicks         ClickEnqueuer
+	cacheMaxAgeSec int // 0 = no Cache-Control header
 }
 
-func NewRedirectHandler(cache LinkLookup, clicks ClickEnqueuer) *RedirectHandler {
-	return &RedirectHandler{cache: cache, clicks: clicks}
+func NewRedirectHandler(cache LinkLookup, clicks ClickEnqueuer, cacheMaxAgeSec int) *RedirectHandler {
+	return &RedirectHandler{cache: cache, clicks: clicks, cacheMaxAgeSec: cacheMaxAgeSec}
 }
 
 // Redirect godoc
@@ -47,7 +49,7 @@ func (h *RedirectHandler) Redirect(c *gin.Context) {
 
 	link, err := h.cache.Get(c.Request.Context(), code)
 	if err != nil {
-		if err == domain.ErrNotFound {
+		if errors.Is(err, domain.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "link not found"})
 			return
 		}
@@ -55,11 +57,8 @@ func (h *RedirectHandler) Redirect(c *gin.Context) {
 		return
 	}
 
+	// GetByCode already filters deleted_at IS NULL, so only active/expiry need checking.
 	if !link.IsLive() {
-		if link.DeletedAt != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "link not found"})
-			return
-		}
 		if !link.IsActive {
 			c.JSON(http.StatusGone, gin.H{"error": "link is inactive"})
 			return
@@ -78,6 +77,10 @@ func (h *RedirectHandler) Redirect(c *gin.Context) {
 		Referer:   c.Request.Referer(),
 	})
 
+	// Let browsers and CDN proxies cache this redirect to reduce origin load.
+	if h.cacheMaxAgeSec > 0 {
+		c.Header("Cache-Control", fmt.Sprintf("public, max-age=%d", h.cacheMaxAgeSec))
+	}
 	c.Redirect(http.StatusFound, link.OriginalURL)
 }
 
