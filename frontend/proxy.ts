@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const COOKIE_NAME = process.env.JWT_COOKIE_NAME ?? "linkr_token"
-const PUBLIC_PATHS = ["/login", "/register", "/api/auth/login", "/api/auth/register"]
+const PUBLIC_PATHS = ["/login", "/register", "/api/auth/login", "/api/auth/register", "/api/auth/logout"]
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl

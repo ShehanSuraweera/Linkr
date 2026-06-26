@@ -43,7 +43,7 @@ export default function DashboardStats({ initialStats }: Props) {
     queryFn: async () => {
       const res = await fetch("/api/analytics-overview")
       if (res.status === 401) {
-        router.push("/login")
+        window.location.replace("/api/auth/logout")
         throw new Error("Session expired")
       }
       if (!res.ok) {

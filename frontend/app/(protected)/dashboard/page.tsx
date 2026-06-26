@@ -1,7 +1,6 @@
 import { Suspense } from "react"
-import Link from "next/link"
-import { getLinks } from "@/lib/api"
-import { ApiError } from "@/lib/api"
+import { redirect } from "next/navigation"
+import { getLinks, ApiError } from "@/lib/api"
 import LinkTable from "@/components/LinkTable"
 
 async function LinksData() {
@@ -16,11 +15,7 @@ async function LinksData() {
     )
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      return (
-        <div className="text-center py-16 text-muted-foreground">
-          <p>Session expired. Please <Link href="/login" className="text-primary underline">sign in again</Link>.</p>
-        </div>
-      )
+      redirect("/api/auth/logout")
     }
     return (
       <div className="text-center py-16 text-destructive">

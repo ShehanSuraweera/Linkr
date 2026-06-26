@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import Link from "next/link"
+import { redirect } from "next/navigation"
 import { getOverview, ApiError } from "@/lib/api"
 import DashboardStats from "@/components/DashboardStats"
 import AnalyticsRefreshButton from "@/components/AnalyticsRefreshButton"
@@ -11,17 +11,7 @@ async function AnalyticsData() {
     initialStats = await getOverview()
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      return (
-        <div className="text-center py-16 text-muted-foreground">
-          <p>
-            Session expired. Please{" "}
-            <Link href="/login" className="text-primary underline">
-              sign in again
-            </Link>
-            .
-          </p>
-        </div>
-      )
+      redirect("/api/auth/logout")
     }
     return (
       <div className="text-center py-16 text-destructive">

@@ -2,7 +2,6 @@
 
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
 import {
   AreaChart,
   Area,
@@ -41,8 +40,6 @@ interface Props {
 }
 
 export default function StatsContent({ code, initialStats }: Props) {
-  const router = useRouter()
-
   const {
     data: stats,
     isLoading,
@@ -55,7 +52,7 @@ export default function StatsContent({ code, initialStats }: Props) {
     queryFn: async () => {
       const res = await fetch(`/api/links-proxy/${code}/stats`)
       if (res.status === 401) {
-        router.push("/login")
+        window.location.replace("/api/auth/logout")
         throw new Error("Session expired")
       }
       if (!res.ok) {

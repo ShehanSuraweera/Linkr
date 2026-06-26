@@ -127,7 +127,7 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
     localStorage.setItem(VIEW_STORAGE_KEY, v)
   }
 
-  const redirectToLogin = useCallback(() => router.push("/login"), [router])
+  const redirectToLogin = useCallback(() => window.location.replace("/api/auth/logout"), [])
 
   useEffect(() => {
     if (searchParams.get("new") === "1") {
