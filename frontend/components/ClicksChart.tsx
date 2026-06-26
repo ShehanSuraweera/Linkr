@@ -1,8 +1,8 @@
 "use client"
 
 import {
-  BarChart,
-  Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -14,32 +14,47 @@ import type { DailyStat } from "@/lib/types"
 export default function ClicksChart({ daily }: { daily: DailyStat[] }) {
   if (daily.length === 0) {
     return (
-      <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
         No clicks yet
       </div>
     )
   }
 
-  const data = daily.map((d) => ({ date: d.Day, clicks: d.Count }))
+  const data = daily.map((d) => ({ date: d.day, clicks: d.count }))
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+      <AreaChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+        <defs>
+          <linearGradient id="clicksFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.18} />
+            <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11, fill: "#9ca3af" }}
+          tick={{ fontSize: 11 }}
+          className="fill-muted-foreground"
           tickFormatter={(v) =>
             new Date(v + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
           }
         />
-        <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} allowDecimals={false} />
+        <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" allowDecimals={false} />
         <Tooltip
           formatter={(v) => [v, "Clicks"]}
           labelFormatter={(l) => new Date(l + "T00:00:00").toLocaleDateString()}
         />
-        <Bar dataKey="clicks" fill="#6366f1" radius={[4, 4, 0, 0]} />
-      </BarChart>
+        <Area
+          type="monotone"
+          dataKey="clicks"
+          stroke="var(--primary)"
+          strokeWidth={2}
+          fill="url(#clicksFill)"
+          dot={false}
+          activeDot={{ r: 5, fill: "var(--primary)" }}
+        />
+      </AreaChart>
     </ResponsiveContainer>
   )
 }

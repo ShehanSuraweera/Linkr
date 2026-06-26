@@ -5,6 +5,7 @@ export interface Link {
   created_at: string
   expires_at?: string
   is_active: boolean
+  total_clicks: number
 }
 
 export interface ListLinksResponse {
@@ -14,8 +15,8 @@ export interface ListLinksResponse {
 }
 
 export interface DailyStat {
-  Day: string
-  Count: number
+  day: string
+  count: number
 }
 
 export interface LinkStats {

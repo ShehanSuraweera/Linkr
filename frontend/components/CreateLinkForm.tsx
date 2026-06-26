@@ -1,25 +1,43 @@
 "use client"
 
 import { useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
+import { toast } from "sonner"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { createLinkSchema, type CreateLinkInput } from "@/lib/schemas"
 import type { Link } from "@/lib/types"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import DateTimePicker from "@/components/DateTimePicker"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface Props {
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onCreated: (link: Link) => void
 }
 
-export default function CreateLinkForm({ onCreated }: Props) {
+export default function CreateLinkForm({ open, onOpenChange, onCreated }: Props) {
   const [serverError, setServerError] = useState("")
-  const [open, setOpen] = useState(false)
 
   const {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<CreateLinkInput>({ resolver: zodResolver(createLinkSchema) })
+
+  const handleOpenChange = (next: boolean) => {
+    onOpenChange(next)
+    if (!next) { reset(); setServerError("") }
+  }
 
   const onSubmit = async (data: CreateLinkInput) => {
     setServerError("")
@@ -36,84 +54,102 @@ export default function CreateLinkForm({ onCreated }: Props) {
       })
       const body = await res.json()
       if (!res.ok) {
+        // Server validation errors (alias taken, invalid URL, etc.) stay inline
+        // so the user can correct the input without losing the form.
         setServerError(body.error ?? "Failed to create link")
         return
       }
+      toast.success("Short link created", {
+        description: `/${(body as Link).short_code} is ready to share.`,
+      })
       onCreated(body as Link)
       reset()
-      setOpen(false)
+      onOpenChange(false)
     } catch {
-      setServerError("Network error — is the API running?")
+      toast.error("Network error", { description: "Could not reach the API. Is the server running?" })
     }
   }
 
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-      >
-        + New link
-      </button>
-    )
-  }
-
   return (
-    <form
-      onSubmit={handleSubmit(onSubmit)}
-      className="bg-white border border-gray-200 rounded-xl p-5 space-y-3 shadow-sm"
-      noValidate
-    >
-      <h2 className="font-semibold text-gray-800">New short link</h2>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>New short link</DialogTitle>
+        </DialogHeader>
 
-      <div>
-        <input
-          {...register("url")}
-          type="url"
-          placeholder="https://example.com/very/long/url"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-        {errors.url && <p className="text-red-500 text-xs mt-1">{errors.url.message}</p>}
-      </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-1" noValidate>
 
-      <div className="flex gap-2">
-        <div className="flex-1">
-          <input
-            {...register("alias")}
-            placeholder="Custom alias (optional)"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          {errors.alias && <p className="text-red-500 text-xs mt-1">{errors.alias.message}</p>}
-        </div>
-        <div className="flex-1">
-          <input
-            {...register("expires_at")}
-            type="datetime-local"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-500"
-          />
-        </div>
-      </div>
+          {/* Destination URL */}
+          <div className="space-y-1.5">
+            <Label htmlFor="url">Destination URL</Label>
+            <Input
+              id="url"
+              {...register("url")}
+              type="url"
+              placeholder="https://example.com/very/long/url"
+              aria-invalid={!!errors.url}
+              autoFocus
+            />
+            {errors.url && (
+              <p className="text-destructive text-xs">{errors.url.message}</p>
+            )}
+          </div>
 
-      {serverError && (
-        <p className="text-red-600 text-sm bg-red-50 rounded-lg px-3 py-2">{serverError}</p>
-      )}
+          {/* Custom alias */}
+          <div className="space-y-1.5">
+            <Label htmlFor="alias">
+              Custom alias{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <Input
+              id="alias"
+              {...register("alias")}
+              placeholder="my-link"
+              aria-invalid={!!errors.alias}
+            />
+            {errors.alias && (
+              <p className="text-destructive text-xs">{errors.alias.message}</p>
+            )}
+          </div>
 
-      <div className="flex gap-2 justify-end">
-        <button
-          type="button"
-          onClick={() => { setOpen(false); reset(); setServerError("") }}
-          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-        >
-          {isSubmitting ? "Creating…" : "Create"}
-        </button>
-      </div>
-    </form>
+          {/* Expiry — date + time pickers */}
+          <div className="space-y-1.5">
+            <Label>
+              Expires at{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <Controller
+              control={control}
+              name="expires_at"
+              render={({ field }) => (
+                <DateTimePicker
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+            <p className="text-muted-foreground text-xs">
+              Time defaults to 23:59 if only a date is chosen.
+            </p>
+          </div>
+
+          {serverError && (
+            <p className="text-destructive text-sm bg-destructive/10 rounded-lg px-3 py-2">
+              {serverError}
+            </p>
+          )}
+
+          <div className="flex gap-2 justify-end pt-1">
+            <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Creating…" : "Create link"}
+            </Button>
+          </div>
+
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
