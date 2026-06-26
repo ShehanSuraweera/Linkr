@@ -79,6 +79,10 @@ func (p *Pipeline) Stop() {
 	p.wg.Wait()
 }
 
+// QueueDepth returns the number of click events currently buffered.
+// Used by the Prometheus metrics collector.
+func (p *Pipeline) QueueDepth() int { return len(p.queue) }
+
 func (p *Pipeline) worker() {
 	defer p.wg.Done()
 	batch := make([]domain.ClickEvent, 0, p.batchSize)
