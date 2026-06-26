@@ -11,8 +11,8 @@ type ClickEvent struct {
 }
 
 type DailyClickStat struct {
-	Day   string `db:"day"`
-	Count int64  `db:"count"`
+	Day   string `db:"day"   json:"day"`
+	Count int64  `db:"count" json:"count"`
 }
 
 type LinkStats struct {
