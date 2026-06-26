@@ -58,7 +58,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
 
           <div className="mb-8">
-            <LinkrLogoIcon />
+            <LinkrLogoIcon size="lg" />
             <h2 className="text-2xl font-bold tracking-tight mt-6">Welcome back</h2>
             <p className="text-muted-foreground text-sm mt-1">Sign in to your account to continue</p>
           </div>

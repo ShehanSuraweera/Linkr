@@ -1,4 +1,5 @@
 import { Link2, BarChart2, Zap } from "lucide-react"
+import LinkrLogoIcon from "./LinkrLogoIcon"
 
 const features = [
   { icon: Link2,     label: "Custom aliases & short codes" },
@@ -20,11 +21,7 @@ export default function AuthPanel() {
     >
       <BackgroundDecoration />
 
-      {/* Brand */}
-      <div className="relative z-10 flex items-center gap-2.5">
-        <ChainLinkIcon />
-        <span className="text-2xl font-extrabold tracking-tight">Linkr</span>
-      </div>
+      <LinkrLogoIcon size="lg"/>
 
       {/* Tagline */}
       <div className="relative z-10 flex-1 flex flex-col justify-center">

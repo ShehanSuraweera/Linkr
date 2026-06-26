@@ -2,14 +2,14 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { Link2, BarChart2, Settings, Menu, X, Plus, ChevronLeft } from "lucide-react"
 import LinkrLogoIcon from "@/components/LinkrLogoIcon"
 import { cn } from "@/lib/utils"
 
 const navItems = [
   { href: "/dashboard", icon: Link2, label: "Links" },
-  { href: "/analytics", icon: BarChart2, label: "Analytics", disabled: true },
+  { href: "/analytics", icon: BarChart2, label: "Analytics" },
   { href: "/settings", icon: Settings, label: "Settings", disabled: true },
 ]
 
@@ -22,16 +22,18 @@ interface NavContentProps {
 }
 
 function NavContent({ pathname, collapsed, onNavigate, onToggleCollapse, isMobile }: NavContentProps) {
-  const router = useRouter()
-
   return (
     <div className="flex flex-col h-full">
       {/* Logo + collapse toggle */}
       <div className={cn(
-        "flex items-center border-b border-sidebar-border shrink-0",
+        "flex items-center border-b border-sidebar-border shrink-0 h-18",
         collapsed ? "justify-center px-3 py-4" : "justify-between px-4 py-4"
       )}>
-        {!collapsed && (
+        {collapsed ? (
+          <Link href="/dashboard" onClick={onNavigate} className="inline-block">
+            <LinkrLogoIcon withText={false} />
+          </Link>
+        ) : (
           <Link href="/dashboard" onClick={onNavigate} className="inline-block">
             <LinkrLogoIcon />
           </Link>

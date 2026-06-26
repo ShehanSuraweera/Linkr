@@ -66,7 +66,7 @@ export default function RegisterPage() {
         <div className="w-full max-w-sm">
 
           <div className="mb-8">
-            <LinkrLogoIcon />
+          <LinkrLogoIcon size="lg"/>
             <h2 className="text-2xl font-bold tracking-tight mt-6">Create an account</h2>
             <p className="text-muted-foreground text-sm mt-1">Start shortening and tracking your links</p>
           </div>

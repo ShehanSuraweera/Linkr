@@ -27,7 +27,7 @@ export default function AppHeader() {
   }
 
   return (
-    <header className="h-14 shrink-0 border-b bg-background flex items-center px-6 gap-4">
+    <header className="h-18 shrink-0 border-b bg-background flex items-center px-6 gap-4">
       {/* Search */}
       <div className="flex-1 max-w-sm">
         <div className="relative">

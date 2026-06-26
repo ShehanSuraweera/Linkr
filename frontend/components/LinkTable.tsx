@@ -44,6 +44,7 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
   const [dialogOpen, setDialogOpen] = useState(false)
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS)
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all")
 
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -91,7 +92,12 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
     staleTime: 30_000,
   })
 
-  const links = data?.pages.flatMap((p) => p.items) ?? []
+  const allLinks = data?.pages.flatMap((p) => p.items) ?? []
+  const links = allLinks.filter((l) => {
+    if (statusFilter === "active") return l.is_active
+    if (statusFilter === "inactive") return !l.is_active
+    return true
+  })
 
   const handleCreated = (link: LinkType) => {
     queryClient.setQueryData<InfiniteData<ListLinksResponse>>(["links"], (old) => {
@@ -160,6 +166,27 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
         )}
       </div>
 
+      <div className="flex items-center gap-1.5">
+        {(["all", "active", "inactive"] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setStatusFilter(f)}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              statusFilter === f
+                ? "bg-foreground text-background"
+                : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {f.charAt(0).toUpperCase() + f.slice(1)}
+          </button>
+        ))}
+        {statusFilter !== "all" && (
+          <span className="ml-1 text-xs text-muted-foreground">
+            {links.length} of {allLinks.length}
+          </span>
+        )}
+      </div>
+
       {links.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 rounded-xl border border-dashed bg-muted/20">
           <div className="p-3 rounded-full bg-muted mb-4">
@@ -170,6 +197,12 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
               <p className="font-semibold text-foreground">No results for &ldquo;{debouncedSearch}&rdquo;</p>
               <p className="text-sm text-muted-foreground mt-1 mb-5">Try a different URL or short code.</p>
               <Button variant="outline" size="sm" onClick={() => setSearch("")}>Clear search</Button>
+            </>
+          ) : statusFilter !== "all" ? (
+            <>
+              <p className="font-semibold text-foreground">No {statusFilter} links</p>
+              <p className="text-sm text-muted-foreground mt-1 mb-5">Try a different filter.</p>
+              <Button variant="outline" size="sm" onClick={() => setStatusFilter("all")}>Show all</Button>
             </>
           ) : (
             <>
