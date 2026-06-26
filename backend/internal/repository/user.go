@@ -54,3 +54,19 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (domain.User, e
 	}
 	return user, nil
 }
+
+func (r *UserRepo) GetByID(ctx context.Context, id int64) (domain.User, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, email, password_hash, created_at FROM users WHERE id = $1`, id)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("get user by id: %w", err)
+	}
+	user, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[domain.User])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.User{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.User{}, fmt.Errorf("get user by id scan: %w", err)
+	}
+	return user, nil
+}

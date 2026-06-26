@@ -1,3 +1,8 @@
+export interface User {
+  id: number
+  email: string
+}
+
 export interface Link {
   id: number
   short_code: string

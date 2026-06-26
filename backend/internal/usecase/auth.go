@@ -12,6 +12,7 @@ import (
 type UserStore interface {
 	Create(ctx context.Context, email, passwordHash string) (domain.User, error)
 	GetByEmail(ctx context.Context, email string) (domain.User, error)
+	GetByID(ctx context.Context, id int64) (domain.User, error)
 }
 
 type AuthUsecase struct {
@@ -71,6 +72,11 @@ func (uc *AuthUsecase) Register(ctx context.Context, email, password string) (do
 		return domain.User{}, "", err
 	}
 	return user, token, nil
+}
+
+// Me returns the user record for the given ID.
+func (uc *AuthUsecase) Me(ctx context.Context, userID int64) (domain.User, error) {
+	return uc.users.GetByID(ctx, userID)
 }
 
 // Login verifies credentials and issues a signed JWT.

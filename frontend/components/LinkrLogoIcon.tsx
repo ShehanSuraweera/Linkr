@@ -1,8 +1,9 @@
 import Image from "next/image";
 
+// withText SVG is 2000×750 (8:3). icon SVG is 2000×2000 (1:1).
 const SIZES = {
-  sm:  { withText: [80,  77],  icon: [28, 28] },
-  md:  { withText: [116, 112], icon: [40, 40] },
+  sm:  { withText: [80,  30], icon: [28, 28] },
+  md:  { withText: [116, 44], icon: [40, 40] },
   lg:  { withText: [300, 113], icon: [56, 56] },
 } as const
 
@@ -19,6 +20,7 @@ export default function LinkrLogoIcon({ withText = true, size = "md" }: LinkrLog
       alt="Linkr"
       width={w}
       height={h}
+      style={{ height: "auto" }}
       priority
     />
   );

@@ -2,12 +2,16 @@
 
 import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Search, ChevronDown, LogOut, User } from "lucide-react"
+import { ChevronDown, LogOut } from "lucide-react"
+import { useUser } from "@/context/UserContext"
 
 export default function AppHeader() {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
+  const { user } = useUser()
+
+  const initial = user?.email?.[0]?.toUpperCase() ?? "?"
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -27,21 +31,8 @@ export default function AppHeader() {
   }
 
   return (
-    <header className="h-18 shrink-0 border-b bg-background flex items-center px-6 gap-4">
-      {/* Search */}
-      <div className="flex-1 max-w-sm">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search links..."
-            className="w-full pl-9 pr-4 py-1.5 text-sm bg-muted rounded-full border border-transparent focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
-          />
-        </div>
-      </div>
-
-      {/* User avatar + dropdown */}
-      <div className="relative ml-auto" ref={dropdownRef}>
+    <header className="h-18 shrink-0 border-b bg-background hidden lg:flex items-center justify-end px-6">
+      <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setDropdownOpen((v) => !v)}
           className="flex items-center gap-1.5 rounded-full hover:bg-muted p-1 transition-colors"
@@ -49,20 +40,23 @@ export default function AppHeader() {
           aria-expanded={dropdownOpen}
         >
           <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold select-none">
-            U
+            {initial}
           </div>
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
 
         {dropdownOpen && (
-          <div className="absolute right-0 top-full mt-2 w-52 bg-popover border border-border rounded-xl shadow-lg overflow-hidden z-50">
+          <div className="absolute right-0 top-full mt-2 w-56 bg-popover border border-border rounded-xl shadow-lg overflow-hidden z-50">
             <div className="px-4 py-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold shrink-0">
-                  U
+                  {initial}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-foreground truncate">My Account</p>
+                  {user?.email
+                    ? <p className="text-xs font-medium text-foreground truncate">{user.email}</p>
+                    : <div className="h-3 w-28 bg-muted rounded animate-pulse" />}
+
                   <p className="text-[11px] text-muted-foreground">Free plan</p>
                 </div>
               </div>

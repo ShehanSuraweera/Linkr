@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shehansuraweera/linkr/internal/domain"
+	"github.com/shehansuraweera/linkr/internal/http/middleware"
 	"github.com/shehansuraweera/linkr/internal/usecase"
 )
 
@@ -56,6 +57,30 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, TokenResponse{Token: token, UserID: user.ID})
+}
+
+// MeResponse is returned by the /me endpoint.
+type MeResponse struct {
+	ID    int64  `json:"id" example:"1"`
+	Email string `json:"email" example:"user@example.com"`
+}
+
+// Me godoc
+// @Summary      Get current user
+// @Description  Returns the authenticated user's profile.
+// @Tags         auth
+// @Produce      json
+// @Success      200  {object}  MeResponse
+// @Failure      401  {object}  ErrorResponse
+// @Router       /api/auth/me [get]
+func (h *AuthHandler) Me(c *gin.Context) {
+	userID := middleware.UserIDFrom(c)
+	user, err := h.uc.Me(c.Request.Context(), userID)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, MeResponse{ID: user.ID, Email: user.Email})
 }
 
 // Login godoc

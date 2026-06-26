@@ -1,7 +1,8 @@
 // Server-side API client — attaches the JWT from the httpOnly cookie.
 // Only used in Server Components and Route Handlers (never runs in the browser).
+import { cache } from "react"
 import { cookies } from "next/headers"
-import type { Link, ListLinksResponse, LinkStats, OverviewStats, TokenResponse } from "./types"
+import type { Link, ListLinksResponse, LinkStats, OverviewStats, TokenResponse, User } from "./types"
 
 const API_URL = process.env.API_URL!
 const COOKIE_NAME = process.env.JWT_COOKIE_NAME!
@@ -86,3 +87,8 @@ export async function getOverview(): Promise<OverviewStats> {
   const token = await getToken()
   return apiFetch<OverviewStats>("/api/analytics/overview", {}, token)
 }
+
+export const getMe = cache(async (): Promise<User> => {
+  const token = await getToken()
+  return apiFetch<User>("/api/auth/me", {}, token)
+})

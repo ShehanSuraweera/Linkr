@@ -62,6 +62,12 @@ func NewRouter(h Handlers, cfg RouterConfig, logger *slog.Logger, ready func() e
 		authGroup.POST("/login", h.Auth.Login)
 	}
 
+	// Auth endpoints that require a valid JWT.
+	authProtected := r.Group("/api/auth", middleware.JWT(cfg.JWTSecret))
+	{
+		authProtected.GET("/me", h.Auth.Me)
+	}
+
 	// Protected API endpoints.
 	api := r.Group("/api", middleware.JWT(cfg.JWTSecret))
 	{

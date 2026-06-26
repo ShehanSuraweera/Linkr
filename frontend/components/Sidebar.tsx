@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { Link2, BarChart2, Settings, Menu, X, Plus, ChevronLeft } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { Link2, BarChart2, Settings, Menu, X, Plus, ChevronLeft, ChevronDown, LogOut } from "lucide-react"
 import LinkrLogoIcon from "@/components/LinkrLogoIcon"
+import { useUser } from "@/context/UserContext"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -127,8 +128,30 @@ function NavContent({ pathname, collapsed, onNavigate, onToggleCollapse, isMobil
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const { user } = useUser()
+  const initial = user?.email?.[0]?.toUpperCase() ?? "?"
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const handleLogout = async () => {
+    setUserMenuOpen(false)
+    await fetch("/api/auth/logout", { method: "POST" })
+    router.push("/login")
+    router.refresh()
+  }
 
   return (
     <>
@@ -158,6 +181,49 @@ export default function Sidebar() {
         <Link href="/dashboard">
           <LinkrLogoIcon />
         </Link>
+
+        {/* User avatar */}
+        <div className="relative ml-auto" ref={userMenuRef}>
+          <button
+            onClick={() => setUserMenuOpen((v) => !v)}
+            className="flex items-center gap-1 rounded-full hover:bg-muted p-1 transition-colors"
+            aria-label="User menu"
+            aria-expanded={userMenuOpen}
+          >
+            <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold select-none">
+              {initial}
+            </div>
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+
+          {userMenuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-56 bg-popover border border-border rounded-xl shadow-lg overflow-hidden z-50">
+              <div className="px-4 py-3 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold shrink-0">
+                    {initial}
+                  </div>
+                  <div className="min-w-0">
+                    {user?.email
+                      ? <p className="text-xs font-medium text-foreground truncate">{user.email}</p>
+                      : <div className="h-3 w-28 bg-muted rounded animate-pulse" />}
+
+                    <p className="text-[11px] text-muted-foreground">Free plan</p>
+                  </div>
+                </div>
+              </div>
+              <div className="py-1">
+                <button
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  Sign out
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Mobile slide-in */}
