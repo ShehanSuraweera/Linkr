@@ -25,3 +25,23 @@ tasks:
     desc: Run the Next.js dev server
     dir: frontend
     cmd: npm run dev
+
+  redis:start:
+    desc: Start a Redis container on the default port
+    cmd: docker run -d --name linkr-redis -p 6379:6379 redis:7-alpine
+
+  redis:stop:
+    desc: Stop and remove the Redis container
+    cmd: docker rm -f linkr-redis
+
+  redis:ping:
+    desc: Check Redis is reachable
+    cmd: docker exec linkr-redis redis-cli ping
+
+  redis:cli:
+    desc: Open an interactive Redis CLI session
+    cmd: docker exec -it linkr-redis redis-cli
+
+  redis:flush:
+    desc: Flush all keys from Redis (clears the link cache)
+    cmd: docker exec linkr-redis redis-cli FLUSHALL

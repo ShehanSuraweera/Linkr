@@ -7,3 +7,6 @@ coverage.out
 .DS_Store
 .next/
 node_modules/
+
+
+/DECISIONS.md
