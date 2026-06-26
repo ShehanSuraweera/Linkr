@@ -14,12 +14,14 @@ func JWT(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if !strings.HasPrefix(header, "Bearer ") {
+			c.Header("WWW-Authenticate", `Bearer realm="linkr"`)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid authorization header"})
 			return
 		}
 		token := strings.TrimPrefix(header, "Bearer ")
 		claims, err := auth.ParseToken(token, secret)
 		if err != nil {
+			c.Header("WWW-Authenticate", `Bearer realm="linkr", error="invalid_token"`)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			return
 		}

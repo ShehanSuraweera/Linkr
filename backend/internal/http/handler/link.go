@@ -88,8 +88,7 @@ func (h *LinkHandler) Create(c *gin.Context) {
 	userID := middleware.UserIDFrom(c)
 
 	var req CreateLinkRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if !bindJSON(c, &req) {
 		return
 	}
 

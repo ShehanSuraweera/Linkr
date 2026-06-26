@@ -11,13 +11,21 @@ func Logger(logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
-		logger.Info("request",
+
+		status := c.Writer.Status()
+		attrs := []any{
 			"method", c.Request.Method,
 			"path", c.Request.URL.Path,
-			"status", c.Writer.Status(),
+			"status", status,
 			"latency_ms", time.Since(start).Milliseconds(),
 			"request_id", c.GetString(RequestIDKey),
 			"ip", c.ClientIP(),
-		)
+		}
+
+		if status >= 500 && len(c.Errors) > 0 {
+			logger.Error("request", append(attrs, "err", c.Errors.Last().Err)...)
+		} else {
+			logger.Info("request", attrs...)
+		}
 	}
 }

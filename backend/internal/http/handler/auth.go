@@ -47,8 +47,7 @@ type ErrorResponse struct {
 // @Router       /api/auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req RegisterRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if !bindJSON(c, &req) {
 		return
 	}
 	user, token, err := h.uc.Register(c.Request.Context(), req.Email, req.Password)
@@ -72,13 +71,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
 // @Router       /api/auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req RegisterRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if !bindJSON(c, &req) {
 		return
 	}
 	user, token, err := h.uc.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, domain.ErrUnauthorized) {
+			c.Header("WWW-Authenticate", `Bearer realm="linkr"`)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 			return
 		}
