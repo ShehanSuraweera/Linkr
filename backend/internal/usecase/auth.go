@@ -25,9 +25,14 @@ func NewAuthUsecase(users UserStore, jwtSecret string) *AuthUsecase {
 
 // validatePassword enforces the password policy:
 // at least 8 characters, one uppercase letter, one digit.
+const maxPasswordLen = 72 // bcrypt silently truncates beyond this
+
 func validatePassword(password string) error {
 	if len(password) < 8 {
 		return newInputErr("password must be at least 8 characters")
+	}
+	if len(password) > maxPasswordLen {
+		return newInputErr("password must be at most 72 characters")
 	}
 	hasUpper, hasDigit := false, false
 	for _, c := range password {
