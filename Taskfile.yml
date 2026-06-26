@@ -45,3 +45,23 @@ tasks:
   redis:flush:
     desc: Flush all keys from Redis (clears the link cache)
     cmd: docker exec linkr-redis redis-cli FLUSHALL
+
+  docker:up:
+    desc: Build images and start the full stack (postgres + redis + backend + frontend)
+    cmd: docker compose up --build
+
+  docker:up:detach:
+    desc: Same as docker:up but runs in the background
+    cmd: docker compose up --build -d
+
+  docker:down:
+    desc: Stop and remove containers (data volume is preserved)
+    cmd: docker compose down
+
+  docker:reset:
+    desc: Stop containers and delete the database volume (fresh start)
+    cmd: docker compose down -v
+
+  docker:logs:
+    desc: Tail logs from all services
+    cmd: docker compose logs -f
