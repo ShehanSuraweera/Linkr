@@ -17,6 +17,7 @@ import {
 import {
   Copy, Check, BarChart2, Link2, RefreshCw,
   Search, X, AlertCircle, LayoutList, LayoutGrid,
+  Power, Trash2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -108,6 +109,9 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
   const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS)
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all")
   const [view, setView] = useState<ViewMode>("card")
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [mutationError, setMutationError] = useState<string | null>(null)
 
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -180,6 +184,63 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
     setDialogOpen(false)
   }
 
+  const patchAllPages = (updater: (item: LinkType) => LinkType | null) => {
+    queryClient.setQueriesData<InfiniteData<ListLinksResponse>>(
+      { queryKey: ["links"] },
+      (old) => {
+        if (!old) return old
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            items: page.items.flatMap((item) => {
+              const next = updater(item)
+              return next ? [next] : []
+            }),
+          })),
+        }
+      }
+    )
+  }
+
+  const toggleActive = async (link: LinkType) => {
+    if (togglingId !== null) return
+    setTogglingId(link.id)
+    const next = !link.is_active
+    // optimistic
+    patchAllPages((item) => (item.id === link.id ? { ...item, is_active: next } : item))
+    try {
+      const res = await fetch(`/api/links/${link.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: next }),
+      })
+      if (!res.ok) throw new Error("Failed to update link")
+      const updated: LinkType = await res.json()
+      patchAllPages((item) => (item.id === link.id ? { ...item, is_active: updated.is_active } : item))
+    } catch {
+      // roll back
+      patchAllPages((item) => (item.id === link.id ? { ...item, is_active: link.is_active } : item))
+      setMutationError("Failed to update link status.")
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (deletingId !== null) return
+    setDeletingId(id)
+    try {
+      const res = await fetch(`/api/links/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error("Failed to delete link")
+      patchAllPages((item) => (item.id === id ? null : item))
+    } catch {
+      setMutationError("Failed to delete link.")
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const copyLink = async (shortCode: string, id: number) => {
     await navigator.clipboard.writeText(`${API_BASE}/${shortCode}`)
     setCopiedId(id)
@@ -211,6 +272,19 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
 
   return (
     <div className="space-y-6">
+
+      {/* Mutation error banner */}
+      {mutationError && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {mutationError}
+          </div>
+          <button onClick={() => setMutationError(null)} className="text-destructive hover:text-destructive/70">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -344,6 +418,10 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
                   link={link}
                   copiedId={copiedId}
                   onCopy={copyLink}
+                  onToggle={toggleActive}
+                  onDelete={handleDelete}
+                  isToggling={togglingId === link.id}
+                  isDeleting={deletingId === link.id}
                 />
               ))}
             </div>
@@ -360,52 +438,22 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
                     <TableHead>Target URL</TableHead>
                     <TableHead className="text-right w-32">Created</TableHead>
                     <TableHead className="text-right w-28">Clicks</TableHead>
+                    <TableHead className="w-20" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {links.map((link) => (
-                    <TableRow
+                    <TableRowWithActions
                       key={link.id}
-                      className="group cursor-pointer"
-                      onClick={() => router.push(`/links/${link.short_code}`)}
-                    >
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <a
-                            href={`${API_BASE}/${link.short_code}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-primary font-mono text-sm hover:underline"
-                          >
-                            /{link.short_code}
-                          </a>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); copyLink(link.short_code, link.id) }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-                            aria-label="Copy link"
-                          >
-                            {copiedId === link.id
-                              ? <Check className="h-3.5 w-3.5 text-green-600" />
-                              : <Copy className="h-3.5 w-3.5" />}
-                          </button>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-muted-foreground text-sm block truncate max-w-xs" title={link.original_url}>
-                          {link.original_url}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right text-sm text-muted-foreground whitespace-nowrap">
-                        {formatDate(link.created_at)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="inline-flex items-center justify-end gap-1.5 text-sm text-muted-foreground">
-                          <BarChart2 className="h-3.5 w-3.5 shrink-0" />
-                          <span className="font-medium tabular-nums">{link.total_clicks.toLocaleString()}</span>
-                        </span>
-                      </TableCell>
-                    </TableRow>
+                      link={link}
+                      copiedId={copiedId}
+                      onCopy={copyLink}
+                      onToggle={toggleActive}
+                      onDelete={handleDelete}
+                      isToggling={togglingId === link.id}
+                      isDeleting={deletingId === link.id}
+                      onNavigate={() => router.push(`/links/${link.short_code}`)}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -426,15 +474,42 @@ function LinkCard({
   link,
   copiedId,
   onCopy,
+  onToggle,
+  onDelete,
+  isToggling,
+  isDeleting,
 }: {
   link: LinkType
   copiedId: number | null
   onCopy: (code: string, id: number) => void
+  onToggle: (link: LinkType) => void
+  onDelete: (id: number) => void
+  isToggling: boolean
+  isDeleting: boolean
 }) {
   const router = useRouter()
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const shortUrl = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"}/${link.short_code}`
   const favicon = getFavicon(link.original_url)
   const hostname = getHostname(link.original_url)
+
+  // Auto-reset delete confirmation after 3 s
+  useEffect(() => {
+    if (!confirmDelete) return
+    const t = setTimeout(() => setConfirmDelete(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirmDelete])
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (confirmDelete) {
+      setConfirmDelete(false)
+      onDelete(link.id)
+    } else {
+      setConfirmDelete(true)
+    }
+  }
 
   return (
     <div
@@ -451,6 +526,7 @@ function LinkCard({
       {/* Middle — main info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
+          <span className={cn("h-2 w-2 rounded-full shrink-0", link.is_active ? "bg-green-500" : "bg-muted-foreground/40")} />
           <a
             href={shortUrl}
             target="_blank"
@@ -475,15 +551,156 @@ function LinkCard({
         </p>
       </div>
 
-      {/* Right — clicks + date */}
+      {/* Right — clicks + date + actions */}
       <div className="shrink-0 flex flex-col items-end gap-1">
         <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
           <BarChart2 className="h-3.5 w-3.5 shrink-0" />
           <span className="font-medium tabular-nums">{link.total_clicks.toLocaleString()}</span>
         </span>
         <span className="text-[11px] text-muted-foreground/70">{formatDate(link.created_at)}</span>
+        {/* Action buttons — visible on hover */}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5">
+          <button
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onToggle(link) }}
+            disabled={isToggling}
+            title={link.is_active ? "Deactivate" : "Activate"}
+            className={cn(
+              "p-1 rounded-md transition-colors",
+              link.is_active
+                ? "text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+          >
+            <Power className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={handleDeleteClick}
+            disabled={isDeleting}
+            title={confirmDelete ? "Click again to confirm" : "Delete"}
+            className={cn(
+              "p-1 rounded-md transition-colors",
+              confirmDelete
+                ? "text-destructive bg-destructive/10 hover:bg-destructive/20"
+                : "text-muted-foreground hover:text-destructive hover:bg-muted"
+            )}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
     </div>
+  )
+}
+
+// ── Table row with actions ────────────────────────────────────────────────────
+
+function TableRowWithActions({
+  link,
+  copiedId,
+  onCopy,
+  onToggle,
+  onDelete,
+  isToggling,
+  isDeleting,
+  onNavigate,
+}: {
+  link: LinkType
+  copiedId: number | null
+  onCopy: (code: string, id: number) => void
+  onToggle: (link: LinkType) => void
+  onDelete: (id: number) => void
+  isToggling: boolean
+  isDeleting: boolean
+  onNavigate: () => void
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  useEffect(() => {
+    if (!confirmDelete) return
+    const t = setTimeout(() => setConfirmDelete(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirmDelete])
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (confirmDelete) {
+      setConfirmDelete(false)
+      onDelete(link.id)
+    } else {
+      setConfirmDelete(true)
+    }
+  }
+
+  return (
+    <TableRow className="group cursor-pointer" onClick={onNavigate}>
+      <TableCell>
+        <div className="flex items-center gap-1.5">
+          <span className={cn("h-2 w-2 rounded-full shrink-0", link.is_active ? "bg-green-500" : "bg-muted-foreground/40")} />
+          <a
+            href={`${API_BASE}/${link.short_code}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-primary font-mono text-sm hover:underline"
+          >
+            /{link.short_code}
+          </a>
+          <button
+            onClick={(e) => { e.stopPropagation(); onCopy(link.short_code, link.id) }}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+            aria-label="Copy link"
+          >
+            {copiedId === link.id
+              ? <Check className="h-3.5 w-3.5 text-green-600" />
+              : <Copy className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      </TableCell>
+      <TableCell>
+        <span className="text-muted-foreground text-sm block truncate max-w-xs" title={link.original_url}>
+          {link.original_url}
+        </span>
+      </TableCell>
+      <TableCell className="text-right text-sm text-muted-foreground whitespace-nowrap">
+        {formatDate(link.created_at)}
+      </TableCell>
+      <TableCell className="text-right">
+        <span className="inline-flex items-center justify-end gap-1.5 text-sm text-muted-foreground">
+          <BarChart2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="font-medium tabular-nums">{link.total_clicks.toLocaleString()}</span>
+        </span>
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggle(link) }}
+            disabled={isToggling}
+            title={link.is_active ? "Deactivate" : "Activate"}
+            className={cn(
+              "p-1.5 rounded-md transition-colors",
+              link.is_active
+                ? "text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+          >
+            <Power className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={handleDeleteClick}
+            disabled={isDeleting}
+            title={confirmDelete ? "Click again to confirm" : "Delete"}
+            className={cn(
+              "p-1.5 rounded-md transition-colors",
+              confirmDelete
+                ? "text-destructive bg-destructive/10 hover:bg-destructive/20"
+                : "text-muted-foreground hover:text-destructive hover:bg-muted"
+            )}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </TableCell>
+    </TableRow>
   )
 }
 

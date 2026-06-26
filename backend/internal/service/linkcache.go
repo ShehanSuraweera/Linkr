@@ -39,10 +39,14 @@ func (lc *LinkCache) Get(ctx context.Context, code string) (domain.Link, error) 
 		return link, nil
 	}
 
+	// Detach from the request context so a cancelled caller does not abort all
+	// coalesced requests and defeat singleflight's stampede guard.
 	v, err, _ := lc.group.Do(code, func() (any, error) {
-		link, err := lc.links.GetByCode(ctx, code)
-		if err != nil {
-			return nil, err
+		dCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		link, dbErr := lc.links.GetByCode(dCtx, code)
+		if dbErr != nil {
+			return nil, dbErr
 		}
 		lc.cache.Add(code, link)
 		return link, nil
@@ -54,6 +58,6 @@ func (lc *LinkCache) Get(ctx context.Context, code string) (domain.Link, error) 
 }
 
 // Invalidate removes a code from the cache (call on link update/delete/pause).
-func (lc *LinkCache) Invalidate(code string) {
+func (lc *LinkCache) Invalidate(_ context.Context, code string) {
 	lc.cache.Remove(code)
 }

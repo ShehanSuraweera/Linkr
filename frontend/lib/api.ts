@@ -78,6 +78,29 @@ export async function createLink(payload: {
   return apiFetch<Link>("/api/links", { method: "POST", body: JSON.stringify(payload) }, token)
 }
 
+export async function updateLink(
+  id: number,
+  payload: { is_active?: boolean; expires_at?: string | null }
+): Promise<Link> {
+  const token = await getToken()
+  return apiFetch<Link>(`/api/links/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  }, token)
+}
+
+export async function deleteLink(id: number): Promise<void> {
+  const token = await getToken()
+  const res = await fetch(`${API_URL}/api/links/${id}`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: "Unknown error" }))
+    throw new ApiError(body.error ?? "Unknown error", res.status)
+  }
+}
+
 export async function getLinkStats(code: string): Promise<LinkStats> {
   const token = await getToken()
   return apiFetch<LinkStats>(`/api/links/${code}/stats`, {}, token)

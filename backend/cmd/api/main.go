@@ -92,6 +92,7 @@ func main() {
 	//                     circuit breaker skips Redis after 5 consecutive failures
 	//   Redis absent    → plain expirable LRU → PostgreSQL
 	var linkLookup handler.LinkLookup
+	var cacheInvalidator handler.CacheInvalidator
 	if redisClient != nil {
 		rc := service.NewRedisCache(linkRepo, redisClient, cfg.RedisCacheTTL, logger)
 		tc, tcErr := service.NewTieredCache(cfg.CacheSize, cfg.L1CacheTTL, rc, logger)
@@ -100,6 +101,7 @@ func main() {
 			os.Exit(1)
 		}
 		linkLookup = tc
+		cacheInvalidator = tc
 		logger.Info("cache: tiered LRU+Redis",
 			"l1_size", cfg.CacheSize,
 			"l1_ttl", cfg.L1CacheTTL,
@@ -112,6 +114,7 @@ func main() {
 			os.Exit(1)
 		}
 		linkLookup = lc
+		cacheInvalidator = lc
 		logger.Info("cache: in-process LRU", "size", cfg.CacheSize, "ttl", cfg.L1CacheTTL)
 	}
 
@@ -132,7 +135,7 @@ func main() {
 
 	h := apphttp.Handlers{
 		Auth:      handler.NewAuthHandler(authUC),
-		Link:      handler.NewLinkHandler(linkUC),
+		Link:      handler.NewLinkHandler(linkUC, cacheInvalidator),
 		Redirect:  handler.NewRedirectHandler(linkLookup, clickPipeline, cfg.CacheControlMaxAge),
 		Analytics: handler.NewAnalyticsHandler(linkUC),
 	}

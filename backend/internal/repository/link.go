@@ -95,6 +95,28 @@ func (r *LinkRepo) List(ctx context.Context, userID int64, cursorCreatedAt time.
 	return links, hasMore, nil
 }
 
+func (r *LinkRepo) Update(ctx context.Context, id, userID int64, isActive *bool, setExpiresAt bool, expiresAt *time.Time) (domain.Link, error) {
+	rows, err := r.pool.Query(ctx,
+		`UPDATE links
+		 SET
+		     is_active  = COALESCE($3, is_active),
+		     expires_at = CASE WHEN $4 THEN $5 ELSE expires_at END
+		 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+		 RETURNING id, short_code, original_url, user_id, created_at, expires_at, is_active, deleted_at`,
+		id, userID, isActive, setExpiresAt, expiresAt)
+	if err != nil {
+		return domain.Link{}, fmt.Errorf("update link: %w", err)
+	}
+	link, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[domain.Link])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Link{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.Link{}, fmt.Errorf("update link scan: %w", err)
+	}
+	return link, nil
+}
+
 func (r *LinkRepo) SoftDelete(ctx context.Context, id, userID int64) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE links SET deleted_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,

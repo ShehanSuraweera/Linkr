@@ -2,6 +2,7 @@ package clicks_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -94,6 +95,33 @@ func TestPipeline_DrainOnStop(t *testing.T) {
 
 	if atomic.LoadInt64(&repo.total) != n {
 		t.Errorf("expected %d clicks after drain, got %d", n, repo.total)
+	}
+}
+
+// alwaysErrFlusher simulates a DB that is always unavailable.
+type alwaysErrFlusher struct{}
+
+func (a *alwaysErrFlusher) FlushBatch(_ context.Context, _ []domain.ClickEvent) error {
+	return errors.New("db down")
+}
+
+// TestPipeline_FlushErrorDoesNotHang verifies that a persistently failing
+// FlushBatch does not deadlock the worker — Stop() must return in bounded time.
+func TestPipeline_FlushErrorDoesNotHang(t *testing.T) {
+	p := clicks.NewPipelineWithRepo(&alwaysErrFlusher{}, 100, 5, 2, 50*time.Millisecond, slog.Default())
+	p.Start()
+
+	for i := 0; i < 10; i++ {
+		p.Enqueue(domain.ClickEvent{LinkID: 1, At: time.Now()})
+	}
+
+	done := make(chan struct{})
+	go func() { p.Stop(); close(done) }()
+	select {
+	case <-done:
+		// good — worker drained without blocking
+	case <-time.After(2 * time.Second):
+		t.Fatal("pipeline.Stop() blocked after persistent flush error")
 	}
 }
 

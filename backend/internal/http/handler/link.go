@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -15,12 +16,18 @@ import (
 	"github.com/shehansuraweera/linkr/internal/usecase"
 )
 
-type LinkHandler struct {
-	uc *usecase.LinkUsecase
+// CacheInvalidator is satisfied by *service.TieredCache and *service.LinkCache.
+type CacheInvalidator interface {
+	Invalidate(ctx context.Context, code string)
 }
 
-func NewLinkHandler(uc *usecase.LinkUsecase) *LinkHandler {
-	return &LinkHandler{uc: uc}
+type LinkHandler struct {
+	uc    *usecase.LinkUsecase
+	cache CacheInvalidator // nil when no cache is configured
+}
+
+func NewLinkHandler(uc *usecase.LinkUsecase, cache CacheInvalidator) *LinkHandler {
+	return &LinkHandler{uc: uc, cache: cache}
 }
 
 // CreateLinkRequest is the request body for creating a short link.
@@ -222,4 +229,100 @@ func (h *LinkHandler) GetStats(c *gin.Context) {
 		Browsers:    stats.Browsers,
 		Referers:    stats.Referers,
 	})
+}
+
+// PatchLinkRequest is the request body for updating a link.
+// ExpiresAt uses json.RawMessage to distinguish absent (no change) from null (clear).
+type PatchLinkRequest struct {
+	IsActive  *bool           `json:"is_active"`
+	ExpiresAt json.RawMessage `json:"expires_at"`
+}
+
+// PatchLink godoc
+// @Summary      Update a link
+// @Description  Toggles is_active and/or updates expires_at. Send null for expires_at to clear it. Requires auth and ownership.
+// @Tags         links
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path      int             true  "Link ID"
+// @Param        body  body      PatchLinkRequest  true  "Fields to update"
+// @Success      200   {object}  LinkResponse
+// @Failure      400   {object}  ErrorResponse
+// @Failure      401   {object}  ErrorResponse
+// @Failure      404   {object}  ErrorResponse
+// @Router       /api/links/{id} [patch]
+func (h *LinkHandler) Patch(c *gin.Context) {
+	userID := middleware.UserIDFrom(c)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	var req PatchLinkRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+
+	var (
+		setExpiresAt bool
+		expiresAt    *time.Time
+	)
+	if req.ExpiresAt != nil {
+		setExpiresAt = true
+		if string(req.ExpiresAt) != "null" {
+			var t time.Time
+			if err := json.Unmarshal(req.ExpiresAt, &t); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "expires_at must be RFC3339 or null"})
+				return
+			}
+			expiresAt = &t
+		}
+	}
+
+	link, err := h.uc.Update(c.Request.Context(), usecase.UpdateLinkInput{
+		ID:           id,
+		UserID:       userID,
+		IsActive:     req.IsActive,
+		SetExpiresAt: setExpiresAt,
+		ExpiresAt:    expiresAt,
+	})
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	if h.cache != nil {
+		h.cache.Invalidate(c.Request.Context(), link.ShortCode)
+	}
+	c.JSON(http.StatusOK, toLinkResponse(link))
+}
+
+// DeleteLink godoc
+// @Summary      Delete a link
+// @Description  Soft-deletes a link owned by the authenticated user.
+// @Tags         links
+// @Security     BearerAuth
+// @Param        id  path  int  true  "Link ID"
+// @Success      204  "No content"
+// @Failure      401  {object}  ErrorResponse
+// @Failure      404  {object}  ErrorResponse
+// @Router       /api/links/{id} [delete]
+func (h *LinkHandler) Delete(c *gin.Context) {
+	userID := middleware.UserIDFrom(c)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	code, err := h.uc.Delete(c.Request.Context(), id, userID)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	if h.cache != nil {
+		h.cache.Invalidate(c.Request.Context(), code)
+	}
+	c.Status(http.StatusNoContent)
 }

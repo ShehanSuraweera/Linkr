@@ -1,10 +1,38 @@
 basePath: /
 definitions:
+  domain.BrowserStat:
+    properties:
+      browser:
+        type: string
+      count:
+        type: integer
+    type: object
   domain.DailyClickStat:
     properties:
       count:
         type: integer
       day:
+        type: string
+    type: object
+  domain.DeviceStat:
+    properties:
+      count:
+        type: integer
+      device:
+        type: string
+    type: object
+  domain.LinkClickStat:
+    properties:
+      short_code:
+        type: string
+      total_clicks:
+        type: integer
+    type: object
+  domain.RefererStat:
+    properties:
+      count:
+        type: integer
+      domain:
         type: string
     type: object
   handler.CreateLinkRequest:
@@ -45,6 +73,9 @@ definitions:
       short_code:
         example: aB3xY7z
         type: string
+      total_clicks:
+        example: 42
+        type: integer
     type: object
   handler.ListLinksResponse:
     properties:
@@ -59,6 +90,56 @@ definitions:
         example: eyJjYSI6Ij...
         type: string
     type: object
+  handler.LoginRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: s3cr3tpassword
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  handler.MeResponse:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      id:
+        example: 1
+        type: integer
+    type: object
+  handler.OverviewResponse:
+    properties:
+      active_links:
+        type: integer
+      browsers:
+        items:
+          $ref: '#/definitions/domain.BrowserStat'
+        type: array
+      daily:
+        items:
+          $ref: '#/definitions/domain.DailyClickStat'
+        type: array
+      devices:
+        items:
+          $ref: '#/definitions/domain.DeviceStat'
+        type: array
+      referers:
+        items:
+          $ref: '#/definitions/domain.RefererStat'
+        type: array
+      top_links:
+        items:
+          $ref: '#/definitions/domain.LinkClickStat'
+        type: array
+      total_clicks:
+        type: integer
+      total_links:
+        type: integer
+    type: object
   handler.RegisterRequest:
     properties:
       email:
@@ -66,7 +147,6 @@ definitions:
         type: string
       password:
         example: s3cr3tpassword
-        minLength: 8
         type: string
     required:
     - email
@@ -74,9 +154,21 @@ definitions:
     type: object
   handler.StatsResponse:
     properties:
+      browsers:
+        items:
+          $ref: '#/definitions/domain.BrowserStat'
+        type: array
       daily:
         items:
           $ref: '#/definitions/domain.DailyClickStat'
+        type: array
+      devices:
+        items:
+          $ref: '#/definitions/domain.DeviceStat'
+        type: array
+      referers:
+        items:
+          $ref: '#/definitions/domain.RefererStat'
         type: array
       total_clicks:
         example: 42
@@ -94,7 +186,7 @@ definitions:
 host: localhost:8080
 info:
   contact:
-    email: senujaambagalaa15@gmail.com
+    email: shehansurawera72@gmail.com
     name: Shehan Suraweera
   description: A URL shortener with analytics. Redirect endpoint is public; all other
     write/read endpoints require a Bearer JWT.
@@ -132,6 +224,26 @@ paths:
       summary: Redirect to original URL
       tags:
       - redirect
+  /api/analytics/overview:
+    get:
+      description: Returns aggregate click stats across all links owned by the authenticated
+        user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.OverviewResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Analytics overview
+      tags:
+      - analytics
   /api/auth/login:
     post:
       consumes:
@@ -143,7 +255,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.RegisterRequest'
+          $ref: '#/definitions/handler.LoginRequest'
       produces:
       - application/json
       responses:
@@ -160,6 +272,23 @@ paths:
           schema:
             $ref: '#/definitions/handler.ErrorResponse'
       summary: Log in
+      tags:
+      - auth
+  /api/auth/me:
+    get:
+      description: Returns the authenticated user's profile.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.MeResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Get current user
       tags:
       - auth
   /api/auth/register:

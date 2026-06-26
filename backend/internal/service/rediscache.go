@@ -97,15 +97,19 @@ func (rc *RedisCache) Get(ctx context.Context, code string) (domain.Link, error)
 	}
 
 	// Cache miss or Redis unavailable — hit PostgreSQL via singleflight.
+	// Use a detached context so a cancelled caller (client disconnect) does not
+	// abort all coalesced requests for the same code and defeat the stampede guard.
 	v, err, _ := rc.group.Do(code, func() (any, error) {
-		link, dbErr := rc.links.GetByCode(ctx, code)
+		dCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		link, dbErr := rc.links.GetByCode(dCtx, code)
 		if dbErr != nil {
 			return nil, dbErr
 		}
 		// Best-effort write back to Redis; failure is non-fatal.
 		if b, mErr := json.Marshal(link); mErr == nil {
 			_, _ = rc.breaker.Execute(func() (any, error) {
-				return nil, rc.client.Set(ctx, key, b, rc.ttl).Err()
+				return nil, rc.client.Set(dCtx, key, b, rc.ttl).Err()
 			})
 		}
 		return link, nil

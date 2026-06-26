@@ -18,9 +18,15 @@ func NewAuthHandler(uc *usecase.AuthUsecase) *AuthHandler {
 	return &AuthHandler{uc: uc}
 }
 
-// RegisterRequest is the request body for register and login.
+// RegisterRequest is the request body for account creation.
 type RegisterRequest struct {
-	Email    string `json:"email" binding:"required,email" example:"user@example.com"`
+	Email    string `json:"email"    binding:"required,email" example:"user@example.com"`
+	Password string `json:"password" binding:"required"       example:"s3cr3tpassword"`
+}
+
+// LoginRequest is the request body for authentication.
+type LoginRequest struct {
+	Email    string `json:"email"    binding:"required" example:"user@example.com"`
 	Password string `json:"password" binding:"required" example:"s3cr3tpassword"`
 }
 
@@ -89,13 +95,13 @@ func (h *AuthHandler) Me(c *gin.Context) {
 // @Tags         auth
 // @Accept       json
 // @Produce      json
-// @Param        body  body      RegisterRequest  true  "Credentials"
+// @Param        body  body      LoginRequest  true  "Credentials"
 // @Success      200   {object}  TokenResponse
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse  "invalid credentials"
 // @Router       /api/auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
-	var req RegisterRequest
+	var req LoginRequest
 	if !bindJSON(c, &req) {
 		return
 	}

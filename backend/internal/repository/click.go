@@ -75,40 +75,44 @@ func (r *ClickRepo) FlushBatch(ctx context.Context, batch []domain.ClickEvent) e
 		refererCounts[breakdownKey{e.LinkID, day, ua.ParseRefererDomain(e.Referer)}]++
 	}
 
+	// Pipeline all aggregation UPSERTs in a single round-trip instead of one
+	// tx.Exec per row. For a batch of 500 events across 50 link×day combinations
+	// this reduces ~200 round-trips to 1.
+	upsertBatch := &pgx.Batch{}
 	for k, n := range dailyCounts {
-		if _, err = tx.Exec(ctx,
+		upsertBatch.Queue(
 			`INSERT INTO click_daily (link_id, day, count) VALUES ($1, $2, $3)
 			 ON CONFLICT (link_id, day) DO UPDATE SET count = click_daily.count + EXCLUDED.count`,
-			k.linkID, k.day, n); err != nil {
-			return fmt.Errorf("click flush daily: %w", err)
-		}
+			k.linkID, k.day, n)
 	}
-
 	for k, n := range deviceCounts {
-		if _, err = tx.Exec(ctx,
+		upsertBatch.Queue(
 			`INSERT INTO clicks_by_device (link_id, day, device, count) VALUES ($1, $2, $3, $4)
 			 ON CONFLICT (link_id, day, device) DO UPDATE SET count = clicks_by_device.count + EXCLUDED.count`,
-			k.linkID, k.day, k.label, n); err != nil {
-			return fmt.Errorf("click flush device: %w", err)
-		}
+			k.linkID, k.day, k.label, n)
 	}
-
 	for k, n := range browserCounts {
-		if _, err = tx.Exec(ctx,
+		upsertBatch.Queue(
 			`INSERT INTO clicks_by_browser (link_id, day, browser, count) VALUES ($1, $2, $3, $4)
 			 ON CONFLICT (link_id, day, browser) DO UPDATE SET count = clicks_by_browser.count + EXCLUDED.count`,
-			k.linkID, k.day, k.label, n); err != nil {
-			return fmt.Errorf("click flush browser: %w", err)
-		}
+			k.linkID, k.day, k.label, n)
 	}
-
 	for k, n := range refererCounts {
-		if _, err = tx.Exec(ctx,
+		upsertBatch.Queue(
 			`INSERT INTO clicks_by_referer (link_id, day, domain, count) VALUES ($1, $2, $3, $4)
 			 ON CONFLICT (link_id, day, domain) DO UPDATE SET count = clicks_by_referer.count + EXCLUDED.count`,
-			k.linkID, k.day, k.label, n); err != nil {
-			return fmt.Errorf("click flush referer: %w", err)
+			k.linkID, k.day, k.label, n)
+	}
+
+	br := tx.SendBatch(ctx, upsertBatch)
+	for i := 0; i < upsertBatch.Len(); i++ {
+		if _, err = br.Exec(); err != nil {
+			_ = br.Close()
+			return fmt.Errorf("click flush upsert[%d]: %w", i, err)
 		}
+	}
+	if err = br.Close(); err != nil {
+		return fmt.Errorf("click flush batch close: %w", err)
 	}
 
 	return tx.Commit(ctx)

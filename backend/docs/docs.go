@@ -12,7 +12,7 @@ const docTemplate = `{
         "termsOfService": "http://swagger.io/terms/",
         "contact": {
             "name": "Shehan Suraweera",
-            "email": "senujaambagalaa15@gmail.com"
+            "email": "shehansurawera72@gmail.com"
         },
         "license": {
             "name": "MIT"
@@ -22,6 +22,37 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/analytics/overview": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns aggregate click stats across all links owned by the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "analytics"
+                ],
+                "summary": "Analytics overview",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.OverviewResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/auth/login": {
             "post": {
                 "description": "Validates credentials and returns a signed JWT.",
@@ -42,7 +73,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.RegisterRequest"
+                            "$ref": "#/definitions/handler.LoginRequest"
                         }
                     }
                 ],
@@ -61,6 +92,32 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "invalid credentials",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/me": {
+            "get": {
+                "description": "Returns the authenticated user's profile.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get current user",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.MeResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/handler.ErrorResponse"
                         }
@@ -315,6 +372,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "domain.BrowserStat": {
+            "type": "object",
+            "properties": {
+                "browser": {
+                    "type": "string"
+                },
+                "count": {
+                    "type": "integer"
+                }
+            }
+        },
         "domain.DailyClickStat": {
             "type": "object",
             "properties": {
@@ -322,6 +390,39 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "day": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.DeviceStat": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "device": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.LinkClickStat": {
+            "type": "object",
+            "properties": {
+                "short_code": {
+                    "type": "string"
+                },
+                "total_clicks": {
+                    "type": "integer"
+                }
+            }
+        },
+        "domain.RefererStat": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "domain": {
                     "type": "string"
                 }
             }
@@ -378,6 +479,10 @@ const docTemplate = `{
                 "short_code": {
                     "type": "string",
                     "example": "aB3xY7z"
+                },
+                "total_clicks": {
+                    "type": "integer",
+                    "example": 42
                 }
             }
         },
@@ -400,6 +505,80 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.LoginRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "s3cr3tpassword"
+                }
+            }
+        },
+        "handler.MeResponse": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "handler.OverviewResponse": {
+            "type": "object",
+            "properties": {
+                "active_links": {
+                    "type": "integer"
+                },
+                "browsers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.BrowserStat"
+                    }
+                },
+                "daily": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.DailyClickStat"
+                    }
+                },
+                "devices": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.DeviceStat"
+                    }
+                },
+                "referers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.RefererStat"
+                    }
+                },
+                "top_links": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.LinkClickStat"
+                    }
+                },
+                "total_clicks": {
+                    "type": "integer"
+                },
+                "total_links": {
+                    "type": "integer"
+                }
+            }
+        },
         "handler.RegisterRequest": {
             "type": "object",
             "required": [
@@ -413,7 +592,6 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string",
-                    "minLength": 8,
                     "example": "s3cr3tpassword"
                 }
             }
@@ -421,10 +599,28 @@ const docTemplate = `{
         "handler.StatsResponse": {
             "type": "object",
             "properties": {
+                "browsers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.BrowserStat"
+                    }
+                },
                 "daily": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/domain.DailyClickStat"
+                    }
+                },
+                "devices": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.DeviceStat"
+                    }
+                },
+                "referers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.RefererStat"
                     }
                 },
                 "total_clicks": {
