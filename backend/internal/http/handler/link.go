@@ -52,6 +52,9 @@ type ListLinksResponse struct {
 type StatsResponse struct {
 	TotalClicks int64                   `json:"total_clicks" example:"42"`
 	Daily       []domain.DailyClickStat `json:"daily"`
+	Devices     []domain.DeviceStat     `json:"devices"`
+	Browsers    []domain.BrowserStat    `json:"browsers"`
+	Referers    []domain.RefererStat    `json:"referers"`
 }
 
 func toLinkResponse(l domain.Link) LinkResponse {
@@ -215,5 +218,8 @@ func (h *LinkHandler) GetStats(c *gin.Context) {
 	c.JSON(http.StatusOK, StatsResponse{
 		TotalClicks: stats.TotalClicks,
 		Daily:       stats.Daily,
+		Devices:     stats.Devices,
+		Browsers:    stats.Browsers,
+		Referers:    stats.Referers,
 	})
 }

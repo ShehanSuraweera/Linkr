@@ -131,9 +131,10 @@ func main() {
 	authUC := usecase.NewAuthUsecase(userRepo, cfg.JWTSecret)
 
 	h := apphttp.Handlers{
-		Auth:     handler.NewAuthHandler(authUC),
-		Link:     handler.NewLinkHandler(linkUC),
-		Redirect: handler.NewRedirectHandler(linkLookup, clickPipeline, cfg.CacheControlMaxAge),
+		Auth:      handler.NewAuthHandler(authUC),
+		Link:      handler.NewLinkHandler(linkUC),
+		Redirect:  handler.NewRedirectHandler(linkLookup, clickPipeline, cfg.CacheControlMaxAge),
+		Analytics: handler.NewAnalyticsHandler(linkUC),
 	}
 
 	// readyz pings the DB — used by Kubernetes readiness probes.

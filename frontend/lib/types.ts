@@ -19,9 +19,43 @@ export interface DailyStat {
   count: number
 }
 
+export interface DeviceStat {
+  device: string
+  count: number
+}
+
+export interface BrowserStat {
+  browser: string
+  count: number
+}
+
+export interface RefererStat {
+  domain: string
+  count: number
+}
+
 export interface LinkStats {
   total_clicks: number
   daily: DailyStat[]
+  devices: DeviceStat[]
+  browsers: BrowserStat[]
+  referers: RefererStat[]
+}
+
+export interface LinkClickStat {
+  short_code: string
+  total_clicks: number
+}
+
+export interface OverviewStats {
+  total_links: number
+  active_links: number
+  total_clicks: number
+  daily: DailyStat[]
+  devices: DeviceStat[]
+  browsers: BrowserStat[]
+  referers: RefererStat[]
+  top_links: LinkClickStat[]
 }
 
 export interface TokenResponse {

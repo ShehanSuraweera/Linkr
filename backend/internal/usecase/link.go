@@ -24,6 +24,7 @@ type LinkStore interface {
 // ClickStore is the read-only analytics interface required by LinkUsecase.
 type ClickStore interface {
 	GetStats(ctx context.Context, linkID int64) (domain.LinkStats, error)
+	GetOverview(ctx context.Context, userID int64) (domain.OverviewStats, error)
 }
 
 // CreateLinkInput carries the inputs for link creation.
@@ -100,6 +101,11 @@ func (uc *LinkUsecase) Create(ctx context.Context, in CreateLinkInput) (domain.L
 // List delegates pagination and search to the repository.
 func (uc *LinkUsecase) List(ctx context.Context, userID int64, cursorCreatedAt time.Time, cursorID int64, limit int32, search string) ([]domain.LinkSummary, bool, error) {
 	return uc.links.List(ctx, userID, cursorCreatedAt, cursorID, limit, search)
+}
+
+// GetOverview returns aggregate analytics across all links owned by userID.
+func (uc *LinkUsecase) GetOverview(ctx context.Context, userID int64) (domain.OverviewStats, error) {
+	return uc.clicks.GetOverview(ctx, userID)
 }
 
 // GetStats returns click analytics for a link, enforcing that the caller owns it.

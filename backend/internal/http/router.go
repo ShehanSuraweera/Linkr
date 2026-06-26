@@ -13,9 +13,10 @@ import (
 )
 
 type Handlers struct {
-	Auth     *handler.AuthHandler
-	Link     *handler.LinkHandler
-	Redirect *handler.RedirectHandler
+	Auth      *handler.AuthHandler
+	Link      *handler.LinkHandler
+	Redirect  *handler.RedirectHandler
+	Analytics *handler.AnalyticsHandler
 }
 
 // RouterConfig holds the values NewRouter needs from the app config.
@@ -67,6 +68,7 @@ func NewRouter(h Handlers, cfg RouterConfig, logger *slog.Logger, ready func() e
 		api.POST("/links", h.Link.Create)
 		api.GET("/links", h.Link.List)
 		api.GET("/links/:code/stats", h.Link.GetStats)
+		api.GET("/analytics/overview", h.Analytics.Overview)
 	}
 
 	return r
