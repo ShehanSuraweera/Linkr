@@ -58,26 +58,30 @@ func (r *LinkRepo) GetByCode(ctx context.Context, code string) (domain.Link, err
 }
 
 // List returns links for userID using keyset pagination over (created_at DESC, id DESC).
+// Returns LinkSummary (entity + aggregate click count) to avoid N+1 stats queries.
 // Pass zero values for cursorCreatedAt/cursorID to get the first page.
-func (r *LinkRepo) List(ctx context.Context, userID int64, cursorCreatedAt time.Time, cursorID int64, limit int32) ([]domain.Link, bool, error) {
+func (r *LinkRepo) List(ctx context.Context, userID int64, cursorCreatedAt time.Time, cursorID int64, limit int32) ([]domain.LinkSummary, bool, error) {
 	if cursorCreatedAt.IsZero() {
 		cursorCreatedAt = time.Now().Add(time.Second) // slightly future so first row is included
 		cursorID = 1<<62 - 1                          // max int64-ish
 	}
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, short_code, original_url, user_id, created_at, expires_at, is_active, deleted_at
-		 FROM links
-		 WHERE user_id = $1
-		   AND deleted_at IS NULL
-		   AND (created_at, id) < ($2, $3)
-		 ORDER BY created_at DESC, id DESC
+		`SELECT l.id, l.short_code, l.original_url, l.user_id, l.created_at, l.expires_at, l.is_active, l.deleted_at,
+		        COALESCE(SUM(cd.count), 0)::bigint AS total_clicks
+		 FROM links l
+		 LEFT JOIN click_daily cd ON cd.link_id = l.id
+		 WHERE l.user_id = $1
+		   AND l.deleted_at IS NULL
+		   AND (l.created_at, l.id) < ($2, $3)
+		 GROUP BY l.id, l.short_code, l.original_url, l.user_id, l.created_at, l.expires_at, l.is_active, l.deleted_at
+		 ORDER BY l.created_at DESC, l.id DESC
 		 LIMIT $4`,
 		userID, cursorCreatedAt, cursorID, limit+1)
 	if err != nil {
 		return nil, false, fmt.Errorf("list links: %w", err)
 	}
-	links, err := pgx.CollectRows(rows, pgx.RowToStructByName[domain.Link])
+	links, err := pgx.CollectRows(rows, pgx.RowToStructByName[domain.LinkSummary])
 	if err != nil {
 		return nil, false, fmt.Errorf("list links scan: %w", err)
 	}
