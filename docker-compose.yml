@@ -5,8 +5,6 @@ services:
       POSTGRES_USER: linkr
       POSTGRES_PASSWORD: linkr
       POSTGRES_DB: linkr
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -14,6 +12,50 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://linkr:linkr@postgres:5432/linkr?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — copy .env.example to .env and edit it}
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # NEXT_PUBLIC_API_URL is baked into the JS bundle at build time.
+        # Keep this as localhost:8080 so short-link hrefs work in the browser.
+        # Change it to your public domain when deploying.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+    depends_on:
+      - backend
+    environment:
+      # API_URL is used server-side (Next.js Route Handlers -> Go backend).
+      # Uses the internal Docker network name — never reaches the host.
+      API_URL: http://backend:8080
+      JWT_COOKIE_NAME: linkr_token
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
