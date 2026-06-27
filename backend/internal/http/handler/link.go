@@ -235,7 +235,7 @@ func (h *LinkHandler) GetStats(c *gin.Context) {
 // ExpiresAt uses json.RawMessage to distinguish absent (no change) from null (clear).
 type PatchLinkRequest struct {
 	IsActive  *bool           `json:"is_active"`
-	ExpiresAt json.RawMessage `json:"expires_at"`
+	ExpiresAt json.RawMessage `json:"expires_at" swaggertype:"string" example:"2026-12-31T23:59:59Z"`
 }
 
 // PatchLink godoc

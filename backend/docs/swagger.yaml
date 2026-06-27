@@ -140,6 +140,14 @@ definitions:
       total_links:
         type: integer
     type: object
+  handler.PatchLinkRequest:
+    properties:
+      expires_at:
+        example: "2026-12-31T23:59:59Z"
+        type: string
+      is_active:
+        type: boolean
+    type: object
   handler.RegisterRequest:
     properties:
       email:
@@ -389,6 +397,72 @@ paths:
       security:
       - BearerAuth: []
       summary: Create a short link
+      tags:
+      - links
+  /api/links/{code}:
+    delete:
+      description: Soft-deletes a link owned by the authenticated user.
+      parameters:
+      - description: Short code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a link
+      tags:
+      - links
+    patch:
+      consumes:
+      - application/json
+      description: Toggles is_active and/or updates expires_at. Send null for expires_at
+        to clear it. Requires auth and ownership.
+      parameters:
+      - description: Short code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.PatchLinkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.LinkResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a link
       tags:
       - links
   /api/links/{code}/stats:
