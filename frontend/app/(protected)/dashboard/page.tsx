@@ -4,15 +4,9 @@ import { getLinks, ApiError } from "@/lib/api"
 import LinkTable from "@/components/LinkTable"
 
 async function LinksData() {
+  let data
   try {
-    const data = await getLinks()
-    return (
-      <LinkTable
-        initialLinks={data.items}
-        initialHasMore={data.has_more}
-        initialNextCursor={data.next_cursor}
-      />
-    )
+    data = await getLinks()
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
       redirect("/api/auth/logout")
@@ -23,6 +17,13 @@ async function LinksData() {
       </div>
     )
   }
+  return (
+    <LinkTable
+      initialLinks={data.items}
+      initialHasMore={data.has_more}
+      initialNextCursor={data.next_cursor}
+    />
+  )
 }
 
 export default function DashboardPage() {

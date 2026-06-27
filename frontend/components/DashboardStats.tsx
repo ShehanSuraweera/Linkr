@@ -2,7 +2,6 @@
 
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
 import {
   AreaChart,
   Area,
@@ -32,8 +31,6 @@ interface Props {
 }
 
 export default function DashboardStats({ initialStats }: Props) {
-  const router = useRouter()
-
   const {
     data: stats,
     isLoading,
@@ -80,13 +77,14 @@ export default function DashboardStats({ initialStats }: Props) {
     return DOW_LABELS.map((name, i) => ({ name, clicks: counts[i] }))
   }, [daily])
 
-  const cumulativeData = useMemo(() => {
-    let sum = 0
-    return daily.map((d) => {
-      sum += d.count
-      return { day: d.day.slice(5), total: sum }
-    })
-  }, [daily])
+  const cumulativeData = useMemo(
+    () =>
+      daily.reduce<{ day: string; total: number }[]>((acc, d) => {
+        const prev = acc[acc.length - 1]?.total ?? 0
+        return [...acc, { day: d.day.slice(5), total: prev + d.count }]
+      }, []),
+    [daily]
+  )
 
   const topLinksData = useMemo(
     () =>

@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  Copy, Check, BarChart2, Link2, RefreshCw,
+  Link2, RefreshCw,
   Search, X, AlertCircle, LayoutList, LayoutGrid,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -103,23 +103,22 @@ function Link2IconSvg() {
 
 export default function LinkTable({ initialLinks, initialHasMore, initialNextCursor }: Props) {
   const queryClient = useQueryClient()
-  const [copiedId, setCopiedId] = useState<number | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [search, setSearch] = useState("")
-  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS)
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all")
-  const [view, setView] = useState<ViewMode>("card")
-  const [pendingAction, setPendingAction] = useState<PendingAction>(null)
-
-  const { togglingId, deletingId, mutationError, setMutationError, toggleActive, handleDelete } = useLinksActions()
-
   const searchParams = useSearchParams()
   const router = useRouter()
 
-  useEffect(() => {
+  const [copiedId, setCopiedId] = useState<number | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(() => searchParams.get("new") === "1")
+  const [search, setSearch] = useState("")
+  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS)
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all")
+  const [view, setView] = useState<ViewMode>(() => {
+    if (typeof window === "undefined") return "card"
     const saved = localStorage.getItem(VIEW_STORAGE_KEY) as ViewMode | null
-    if (saved === "table" || saved === "card") setView(saved)
-  }, [])
+    return saved === "table" || saved === "card" ? saved : "card"
+  })
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null)
+
+  const { togglingId, deletingId, mutationError, setMutationError, toggleActive, handleDelete } = useLinksActions()
 
   const changeView = (v: ViewMode) => {
     setView(v)
@@ -130,7 +129,6 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
 
   useEffect(() => {
     if (searchParams.get("new") === "1") {
-      setDialogOpen(true)
       router.replace("/dashboard", { scroll: false })
     }
   }, [searchParams, router])
