@@ -2,6 +2,8 @@
 
 A production-grade URL shortener built with **Go (Gin)** and **Next.js**. Create short links, track clicks, and view per-link analytics broken down by day, device, browser, and referrer.
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 ![System overview](docs/system-overview.svg)
 
 | Service | Stack | Port |
