@@ -181,13 +181,16 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
   })
 
   const handleCreated = (link: LinkType) => {
-    queryClient.setQueryData<InfiniteData<ListLinksResponse>>(["links"], (old) => {
-      if (!old) return old
-      return {
-        ...old,
-        pages: [{ ...old.pages[0], items: [link, ...old.pages[0].items] }, ...old.pages.slice(1)],
+    queryClient.setQueriesData<InfiniteData<ListLinksResponse>>(
+      { queryKey: ["links"] },
+      (old) => {
+        if (!old) return old
+        return {
+          ...old,
+          pages: [{ ...old.pages[0], items: [link, ...old.pages[0].items] }, ...old.pages.slice(1)],
+        }
       }
-    })
+    )
     setDialogOpen(false)
   }
 
