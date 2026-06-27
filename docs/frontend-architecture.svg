@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 460" font-family="ui-monospace,monospace" font-size="11">
+  <rect width="100%" height="100%" fill="white"/>
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <text x="410" y="22" text-anchor="middle" fill="#1e293b" font-size="14" font-weight="700">Next.js Frontend Architecture</text>
+
+  <!-- Server vs Client legend -->
+  <rect x="560" y="36" width="250" height="76" rx="4" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="685" y="54" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">Component types</text>
+  <rect x="575" y="62" width="14" height="14" rx="3" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+  <text x="596" y="73" fill="#475569" font-size="10">Server Component — runs on server, fetches data, no JS bundle</text>
+  <rect x="575" y="82" width="14" height="14" rx="3" fill="#fdf2f8" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="596" y="93" fill="#475569" font-size="10">Client Component — interactive, TanStack Query, Recharts</text>
+  <rect x="575" y="102" width="14" height="14" rx="3" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="596" y="113" fill="#475569" font-size="10">Route Handler — server-side proxy to Go backend (avoids CORS)</text>
+
+  <!-- App Router root -->
+  <rect x="20" y="36" width="120" height="30" rx="4" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+  <text x="80" y="55" text-anchor="middle" fill="#0c4a6e" font-weight="600">app/layout.tsx</text>
+
+  <line x1="80" y1="66" x2="80" y2="86" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Root page -->
+  <rect x="20" y="86" width="120" height="30" rx="4" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+  <text x="80" y="100" text-anchor="middle" fill="#0c4a6e">app/page.tsx</text>
+  <text x="80" y="112" text-anchor="middle" fill="#0ea5e9" font-size="9">redirect → /dashboard</text>
+
+  <!-- Auth group -->
+  <rect x="20" y="140" width="240" height="110" rx="6" fill="#f8fafc" stroke="#64748b" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="130" y="157" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">(auth) group — no layout</text>
+
+  <rect x="35" y="164" width="200" height="28" rx="4" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+  <text x="135" y="178" text-anchor="middle" fill="#0c4a6e">login/page.tsx</text>
+  <text x="135" y="189" text-anchor="middle" fill="#0ea5e9" font-size="9">Server — renders LoginForm client component</text>
+
+  <rect x="35" y="198" width="200" height="28" rx="4" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+  <text x="135" y="212" text-anchor="middle" fill="#0c4a6e">register/page.tsx</text>
+  <text x="135" y="223" text-anchor="middle" fill="#0ea5e9" font-size="9">Server — renders RegisterForm client component</text>
+
+  <!-- Protected group -->
+  <rect x="20" y="270" width="520" height="170" rx="6" fill="#f8fafc" stroke="#64748b" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="280" y="287" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">(protected) group — auth guard + Sidebar shell</text>
+
+  <!-- Protected layout -->
+  <rect x="35" y="294" width="490" height="28" rx="4" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+  <text x="280" y="308" text-anchor="middle" fill="#0c4a6e">layout.tsx — reads JWT cookie · redirects to /login if missing · renders Sidebar</text>
+  <text x="280" y="319" text-anchor="middle" fill="#0ea5e9" font-size="9">Server Component · auth guard runs on server before page renders</text>
+
+  <!-- Dashboard -->
+  <rect x="35" y="330" width="150" height="40" rx="4" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+  <text x="110" y="346" text-anchor="middle" fill="#0c4a6e">dashboard/page.tsx</text>
+  <text x="110" y="358" text-anchor="middle" fill="#0ea5e9" font-size="9">Server · overview stats</text>
+  <text x="110" y="368" text-anchor="middle" fill="#0ea5e9" font-size="9">→ LinkTable (client)</text>
+
+  <!-- Analytics -->
+  <rect x="200" y="330" width="150" height="40" rx="4" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+  <text x="275" y="346" text-anchor="middle" fill="#0c4a6e">analytics/page.tsx</text>
+  <text x="275" y="358" text-anchor="middle" fill="#0ea5e9" font-size="9">Server · fetches overview</text>
+  <text x="275" y="368" text-anchor="middle" fill="#0ea5e9" font-size="9">→ DashboardStats (client)</text>
+
+  <!-- Links/code -->
+  <rect x="365" y="330" width="160" height="40" rx="4" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+  <text x="445" y="346" text-anchor="middle" fill="#0c4a6e">links/[code]/page.tsx</text>
+  <text x="445" y="358" text-anchor="middle" fill="#0ea5e9" font-size="9">Server · fetches per-link stats</text>
+  <text x="445" y="368" text-anchor="middle" fill="#0ea5e9" font-size="9">→ StatsContent (client)</text>
+
+  <!-- Route Handlers -->
+  <rect x="20" y="456" width="520" height="1" rx="0" fill="none"/>
+
+  <!-- Client components section -->
+  <rect x="20" y="450" width="780" height="1"/>
+  <text x="410" y="406" text-anchor="middle" fill="#475569" font-size="11" font-weight="600">Key Client Components</text>
+
+  <rect x="20" y="414" width="175" height="34" rx="4" fill="#fdf2f8" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="107" y="428" text-anchor="middle" fill="#6b21a8" font-weight="600">LinkTable</text>
+  <text x="107" y="441" text-anchor="middle" fill="#a855f7" font-size="9">infinite scroll · create dialog · search</text>
+
+  <rect x="205" y="414" width="175" height="34" rx="4" fill="#fdf2f8" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="292" y="428" text-anchor="middle" fill="#6b21a8" font-weight="600">CreateLinkForm</text>
+  <text x="292" y="441" text-anchor="middle" fill="#a855f7" font-size="9">Zod validation · expiry · alias</text>
+
+  <rect x="390" y="414" width="175" height="34" rx="4" fill="#fdf2f8" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="477" y="428" text-anchor="middle" fill="#6b21a8" font-weight="600">StatsContent</text>
+  <text x="477" y="441" text-anchor="middle" fill="#a855f7" font-size="9">charts · device/browser donuts</text>
+
+  <rect x="575" y="414" width="175" height="34" rx="4" fill="#fdf2f8" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="662" y="428" text-anchor="middle" fill="#6b21a8" font-weight="600">DashboardStats</text>
+  <text x="662" y="441" text-anchor="middle" fill="#a855f7" font-size="9">aggregate overview cards</text>
+
+  <!-- Route Handlers box -->
+  <rect x="560" y="140" width="240" height="110" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="680" y="158" text-anchor="middle" fill="#14532d" font-weight="600" font-size="11">Route Handlers (server-side proxy)</text>
+  <text x="680" y="174" text-anchor="middle" fill="#64748b" font-size="10">app/api/**/route.ts</text>
+  <text x="680" y="190" text-anchor="middle" fill="#16a34a" font-size="10">reads JWT cookie · forwards to Go backend</text>
+  <text x="680" y="205" text-anchor="middle" fill="#16a34a" font-size="10">API_URL=http://backend:8080 (internal)</text>
+  <text x="680" y="220" text-anchor="middle" fill="#64748b" font-size="10">avoids CORS · hides backend from browser</text>
+  <text x="680" y="236" text-anchor="middle" fill="#16a34a" font-size="9">client → :3000/api/* → :8080/api/* → Postgres</text>
+
+  <!-- Arrows from pages to route handlers -->
+  <line x1="540" y1="195" x2="560" y2="195" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#a)"/>
+
+  <!-- TanStack Query note -->
+  <rect x="560" y="264" width="240" height="50" rx="4" fill="#fef9c3" stroke="#ca8a04" stroke-width="1"/>
+  <text x="680" y="282" text-anchor="middle" fill="#713f12" font-size="10" font-weight="600">TanStack Query</text>
+  <text x="680" y="296" text-anchor="middle" fill="#78350f" font-size="9">useInfiniteQuery for link list (cursor pagination)</text>
+  <text x="680" y="308" text-anchor="middle" fill="#78350f" font-size="9">refetchOnWindowFocus — no background polling</text>
+</svg>

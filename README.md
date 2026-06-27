@@ -1,6 +1,39 @@
 # Linkr — URL Shortener with Analytics
 
-A full-stack URL shortener built with Go (Gin) and Next.js. Create short links, track clicks, and view per-link analytics broken down by day, device, browser, and referrer.
+A production-grade URL shortener built with **Go (Gin)** and **Next.js**. Create short links, track clicks, and view per-link analytics broken down by day, device, browser, and referrer.
+
+![System overview](docs/system-overview.svg)
+
+| Service | Stack | Port |
+|---|---|---|
+| Frontend | Next.js · App Router · TanStack Query | 3000 |
+| Backend | Go · Gin · pgx · Redis | 8080 |
+| Cache | Redis 7 (L2 cache + rate limit) | 6379 |
+| Database | PostgreSQL 16 | 5432 |
+
+→ **[Backend architecture & scaling](backend/README.md)** · **[Frontend architecture](frontend/README.md)** · **[Design decisions](DECISIONS.md)**
+
+---
+
+## Screenshots
+
+**Auth**
+
+| Login | Register |
+|---|---|
+| ![Login](docs/screenshots/login.png) | ![Register](docs/screenshots/register.png) |
+
+**Analytics — aggregate overview**
+
+| Stats cards · clicks over time · cumulative growth · day of week | Top links by clicks · device & browser breakdown |
+|---|---|
+| ![Analytics overview top](docs/screenshots/analytics-1.png) | ![Analytics overview bottom](docs/screenshots/analytics-2.png) |
+
+**Analytics — per-link stats**
+
+| Clicks over time | Cumulative growth · device & browser donuts · referrers |
+|---|---|
+| ![Per-link stats top](docs/screenshots/analytics-per-link-1.png) | ![Per-link stats bottom](docs/screenshots/analytics-per-link-2.png) |
 
 ---
 
@@ -9,29 +42,31 @@ A full-stack URL shortener built with Go (Gin) and Next.js. Create short links, 
 | Tool | Version |
 |---|---|
 | Docker + Compose | any recent |
-| Go | 1.26+ *(local dev only)* |
+| Go | 1.22+ *(local dev only)* |
 | Node.js | 20+ *(local dev only)* |
-| [Task](https://taskfile.dev) | any *(optional convenience runner)* |
+| [Task](https://taskfile.dev) | any *(optional)* |
 
 ---
 
 ## Quick Start — Docker (recommended)
 
-Runs the full stack (Postgres, Redis, Go backend, Next.js frontend) with a single command.
+Runs all four services (Postgres, Redis, Go backend, Next.js frontend) with one command.
 
 ```bash
 # 1. Create your env file
 cp .env.example .env
-#    Edit .env and set JWT_SECRET to a random string of 32+ characters
+#    Set JWT_SECRET to a random string of 32+ characters
 
-# 2. Build images and start all services
+# 2. Build images and start everything
 docker compose up --build
 ```
 
 - Dashboard: `http://localhost:3000`
-- API / Swagger: `http://localhost:8080/swagger/index.html`
+- API + Swagger: `http://localhost:8080/swagger/index.html`
+- Prometheus metrics: `http://localhost:8080/metrics`
 
-To stop: `docker compose down`. To also wipe the database volume: `docker compose down -v`.
+Stop: `docker compose down`
+Wipe DB volume too: `docker compose down -v`
 
 ---
 
@@ -43,32 +78,22 @@ To stop: `docker compose down`. To also wipe the database volume: `docker compos
 docker compose up -d postgres redis
 ```
 
-### 2. Configure the backend
+### 2. Configure and run the backend
 
 ```bash
 cp backend/.env.example backend/.env
-# Edit backend/.env — set JWT_SECRET (32+ chars) and optionally REDIS_URL
-```
+# Edit backend/.env — set JWT_SECRET (32+ chars)
 
-### 3. Run the backend
-
-Migrations run automatically on startup.
-
-```bash
 task run          # or: cd backend && go run ./cmd/api/
 ```
 
-API available at `http://localhost:8080`. Swagger UI at `http://localhost:8080/swagger/index.html`.
+API at `http://localhost:8080`. Migrations run automatically on startup.
 
-### 4. Configure the frontend
+### 3. Configure and run the frontend
 
 ```bash
 cp frontend/.env.example frontend/.env.local
-```
 
-### 5. Run the frontend
-
-```bash
 task web          # or: cd frontend && npm install && npm run dev
 ```
 
@@ -79,14 +104,12 @@ Dashboard at `http://localhost:3000`.
 ## Running Tests
 
 ```bash
-# via Task (runs with race detector)
-task test
-
-# or manually
+task test                      # race detector included
+# or:
 cd backend && go test -race ./...
 ```
 
-Tests cover: short-code generation, URL validation, JWT auth, async click pipeline (flush on batch size, flush on ticker, drop on full buffer, drain on shutdown, error resilience, concurrent enqueue under race detector), link domain logic, and user-agent parsing.
+Tests cover: short-code generation, URL validation, JWT auth, async click pipeline (batch flush, ticker flush, drop on full buffer, drain on shutdown, concurrent enqueue under `-race`), link domain logic, user-agent parsing.
 
 ---
 
@@ -94,25 +117,48 @@ Tests cover: short-code generation, URL validation, JWT auth, async click pipeli
 
 ```
 .
-├── backend/                  Go API server
-│   ├── cmd/api/              Entry point (main.go)
+├── backend/               Go API server
+│   ├── cmd/api/           Entry point (main.go, graceful shutdown)
 │   ├── internal/
-│   │   ├── clicks/           Async click pipeline
-│   │   ├── config/           Environment config
-│   │   ├── domain/           Core types (Link, ClickEvent, Stats)
-│   │   ├── http/             Gin router, handlers, middleware
-│   │   ├── repository/       PostgreSQL queries (pgx)
-│   │   ├── service/          Tiered cache (LRU + Redis + circuit breaker)
-│   │   ├── shortcode/        Short-code generation
-│   │   └── usecase/          Business logic
-│   └── migrations/           SQL migrations (golang-migrate)
-├── frontend/                 Next.js 15 app
-│   ├── app/                  App Router pages
-│   └── components/           UI components
-├── docker-compose.yml        Full-stack: Postgres + Redis + backend + frontend
-├── Taskfile.yml              Task runner shortcuts
-└── DECISIONS.md              Architecture decisions and trade-offs
+│   │   ├── clicks/        Async click pipeline (buffered channel → batch CopyFrom)
+│   │   ├── config/        Typed env config with defaults
+│   │   ├── domain/        Core types (Link, ClickEvent, Stats)
+│   │   ├── http/          Gin router, handlers, middleware
+│   │   ├── repository/    PostgreSQL queries (pgx)
+│   │   ├── service/       Tiered cache (LRU + Redis + circuit breaker)
+│   │   ├── shortcode/     Secure random base62 code generation
+│   │   └── usecase/       Business logic
+│   └── migrations/        SQL migrations (golang-migrate, 4 total)
+├── frontend/              Next.js app
+│   ├── app/               App Router pages + Route Handler proxies
+│   └── components/        Server and client components
+├── docs/                  Architecture SVG diagrams
+├── docker-compose.yml     Full-stack: Postgres + Redis + backend + frontend
+├── Taskfile.yml           Task runner shortcuts
+└── DECISIONS.md           Architecture decisions and trade-offs
 ```
+
+---
+
+## API Overview
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/register` | — | Create account |
+| `POST` | `/api/auth/login` | — | Get JWT |
+| `GET` | `/api/auth/me` | JWT | Current user |
+| `POST` | `/api/links` | JWT | Create short link |
+| `GET` | `/api/links` | JWT | List links (cursor pagination) |
+| `PATCH` | `/api/links/:id` | JWT | Toggle active / set expiry |
+| `DELETE` | `/api/links/:id` | JWT | Soft-delete link |
+| `GET` | `/api/links/:code/stats` | JWT | Click analytics |
+| `GET` | `/api/analytics/overview` | JWT | Aggregate stats across all links |
+| `GET` | `/:code` | — | Redirect (hot path) |
+| `GET` | `/metrics` | — | Prometheus metrics |
+| `GET` | `/healthz` | — | Liveness probe |
+| `GET` | `/readyz` | — | Readiness probe (pings DB) |
+
+Full interactive docs: `http://localhost:8080/swagger/index.html`
 
 ---
 
@@ -143,26 +189,6 @@ Tests cover: short-code generation, URL validation, JWT auth, async click pipeli
 
 | Variable | Default | Description |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | Backend base URL |
-
----
-
-## API Overview
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/auth/register` | — | Create account |
-| `POST` | `/api/auth/login` | — | Get JWT |
-| `GET` | `/api/auth/me` | JWT | Current user |
-| `POST` | `/api/links` | JWT | Create short link |
-| `GET` | `/api/links` | JWT | List links (cursor pagination) |
-| `PATCH` | `/api/links/:id` | JWT | Toggle active / set expiry |
-| `DELETE` | `/api/links/:id` | JWT | Soft-delete link |
-| `GET` | `/api/links/:code/stats` | JWT | Click analytics |
-| `GET` | `/api/analytics/overview` | JWT | Aggregate stats across all links |
-| `GET` | `/:code` | — | Redirect (hot path) |
-| `GET` | `/metrics` | — | Prometheus metrics |
-| `GET` | `/healthz` | — | Liveness probe |
-| `GET` | `/readyz` | — | Readiness probe (pings DB) |
-
-Full interactive docs: `http://localhost:8080/swagger/index.html`
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | Backend URL (client-side, baked into bundle) |
+| `API_URL` | `http://localhost:8080` | Backend URL (server-side Route Handlers) |
+| `JWT_COOKIE_NAME` | `linkr_token` | HTTP-only JWT cookie name |

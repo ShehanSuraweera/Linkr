@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 500" font-family="ui-monospace,monospace" font-size="12">
+  <rect width="100%" height="100%" fill="white"/>
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="410" y="22" text-anchor="middle" fill="#1e293b" font-size="14" font-weight="700">Multi-Instance Scaling</text>
+
+  <!-- Load Balancer -->
+  <rect x="310" y="36" width="200" height="44" rx="6" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+  <text x="410" y="56" text-anchor="middle" fill="#334155" font-weight="700">Load Balancer</text>
+  <text x="410" y="72" text-anchor="middle" fill="#64748b" font-size="10">round-robin · health checks /healthz</text>
+
+  <!-- Arrows LB → instances -->
+  <line x1="320" y1="80" x2="135" y2="136" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="410" y1="80" x2="410" y2="136" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="500" y1="80" x2="685" y2="136" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Instance boxes (3 replicas) -->
+  <!-- Instance 1 -->
+  <rect x="30" y="136" width="210" height="120" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"/>
+  <text x="135" y="156" text-anchor="middle" fill="#9f1239" font-weight="700">Go Replica 1</text>
+  <text x="135" y="170" text-anchor="middle" fill="#e11d48" font-size="10">stateless · :8080</text>
+  <rect x="50" y="178" width="170" height="32" rx="4" fill="#fffbeb" stroke="#d97706" stroke-width="1"/>
+  <text x="135" y="193" text-anchor="middle" fill="#92400e" font-weight="600" font-size="11">L1 LRU Cache</text>
+  <text x="135" y="205" text-anchor="middle" fill="#d97706" font-size="10">10k entries · TTL 30 s · in-process</text>
+  <text x="135" y="234" text-anchor="middle" fill="#64748b" font-size="10">click buffer: 2.5k events</text>
+  <text x="135" y="246" text-anchor="middle" fill="#64748b" font-size="10">singleflight per code</text>
+
+  <!-- Instance 2 -->
+  <rect x="305" y="136" width="210" height="120" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"/>
+  <text x="410" y="156" text-anchor="middle" fill="#9f1239" font-weight="700">Go Replica 2</text>
+  <text x="410" y="170" text-anchor="middle" fill="#e11d48" font-size="10">stateless · :8080</text>
+  <rect x="325" y="178" width="170" height="32" rx="4" fill="#fffbeb" stroke="#d97706" stroke-width="1"/>
+  <text x="410" y="193" text-anchor="middle" fill="#92400e" font-weight="600" font-size="11">L1 LRU Cache</text>
+  <text x="410" y="205" text-anchor="middle" fill="#d97706" font-size="10">10k entries · TTL 30 s · in-process</text>
+  <text x="410" y="234" text-anchor="middle" fill="#64748b" font-size="10">click buffer: 2.5k events</text>
+  <text x="410" y="246" text-anchor="middle" fill="#64748b" font-size="10">singleflight per code</text>
+
+  <!-- Instance N -->
+  <rect x="580" y="136" width="210" height="120" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"/>
+  <text x="685" y="156" text-anchor="middle" fill="#9f1239" font-weight="700">Go Replica N</text>
+  <text x="685" y="170" text-anchor="middle" fill="#e11d48" font-size="10">stateless · :8080</text>
+  <rect x="600" y="178" width="170" height="32" rx="4" fill="#fffbeb" stroke="#d97706" stroke-width="1"/>
+  <text x="685" y="193" text-anchor="middle" fill="#92400e" font-weight="600" font-size="11">L1 LRU Cache</text>
+  <text x="685" y="205" text-anchor="middle" fill="#d97706" font-size="10">10k entries · TTL 30 s · in-process</text>
+  <text x="685" y="234" text-anchor="middle" fill="#64748b" font-size="10">click buffer: 2.5k events</text>
+  <text x="685" y="246" text-anchor="middle" fill="#64748b" font-size="10">singleflight per code</text>
+
+  <!-- Ellipsis between replicas -->
+  <text x="265" y="202" text-anchor="middle" fill="#64748b" font-size="18">···</text>
+  <text x="545" y="202" text-anchor="middle" fill="#64748b" font-size="18">···</text>
+
+  <!-- Arrows → Redis -->
+  <line x1="135" y1="256" x2="290" y2="316" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="410" y1="256" x2="410" y2="316" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="685" y1="256" x2="530" y2="316" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Shared Redis -->
+  <rect x="240" y="316" width="340" height="58" rx="6" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+  <text x="410" y="337" text-anchor="middle" fill="#9a3412" font-weight="700">Redis (shared)</text>
+  <text x="410" y="352" text-anchor="middle" fill="#f97316" font-size="10">L2 link cache · key=link:{code} · TTL 300 s · circuit breaker (5 errors → open 30 s)</text>
+  <text x="410" y="366" text-anchor="middle" fill="#f97316" font-size="10">GCRA rate limit · global across all replicas · falls back per-instance on outage</text>
+
+  <!-- Arrow Redis → Postgres -->
+  <line x1="410" y1="374" x2="410" y2="416" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="435" y="400" fill="#64748b" font-size="10">cache miss → pgx pool</text>
+
+  <!-- Postgres -->
+  <rect x="240" y="416" width="340" height="58" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+  <text x="410" y="437" text-anchor="middle" fill="#14532d" font-weight="700">PostgreSQL (single primary)</text>
+  <text x="410" y="452" text-anchor="middle" fill="#16a34a" font-size="10">pgxpool · max 25 conns per replica · partial indexes · keyset pagination</text>
+  <text x="410" y="466" text-anchor="middle" fill="#16a34a" font-size="10">click batches via COPY protocol · first bottleneck under write-heavy load</text>
+
+  <!-- Invalidation note -->
+  <rect x="30" y="316" width="195" height="58" rx="4" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="127" y="334" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">Cache Invalidation</text>
+  <text x="127" y="349" text-anchor="middle" fill="#64748b" font-size="10">delete/update → evict Redis</text>
+  <text x="127" y="363" text-anchor="middle" fill="#64748b" font-size="10">L1 expires by TTL (other replicas)</text>
+  <text x="127" y="374" text-anchor="middle" fill="#94a3b8" font-size="9">bounded staleness: max 30 s</text>
+
+  <!-- Invalidation arrow -->
+  <line x1="135" y1="316" x2="240" y2="340" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#a)"/>
+</svg>
