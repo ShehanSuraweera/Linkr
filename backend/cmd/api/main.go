@@ -55,6 +55,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// lifetime context — cancelled on SIGINT/SIGTERM; passed to subsystems
+	// (rate limiter cleanup goroutine) so they exit cleanly on shutdown.
+	appCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	pool, err := repository.NewPool(ctx, cfg)
 	cancel()
@@ -149,7 +154,7 @@ func main() {
 
 	// Rate limiter: Redis-backed (global across replicas) when Redis is available,
 	// per-instance token bucket otherwise.
-	rateLimiter := middleware.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, redisClient)
+	rateLimiter := middleware.RateLimit(appCtx, cfg.RateLimitRPS, cfg.RateLimitBurst, redisClient)
 
 	router := apphttp.NewRouter(h, apphttp.RouterConfig{
 		JWTSecret: cfg.JWTSecret,
@@ -172,14 +177,13 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	<-appCtx.Done()
+	stop() // release signal resources immediately
 
 	logger.Info("shutting down")
-	ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown error", "err", err)
 	}
 

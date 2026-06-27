@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -19,7 +20,9 @@ import (
 // If client is nil, or if Redis is unavailable at runtime, it falls back to
 // a per-instance in-process token bucket. The fallback is automatic and silent
 // so a Redis outage never takes down the rate limiter.
-func RateLimit(rps float64, burst int, client *redis.Client) gin.HandlerFunc {
+//
+// The cleanup goroutine exits when ctx is cancelled (i.e. on server shutdown).
+func RateLimit(ctx context.Context, rps float64, burst int, client *redis.Client) gin.HandlerFunc {
 	// Redis-backed limiter (shared across replicas).
 	var redisLimiter *redis_rate.Limiter
 	if client != nil {
@@ -35,15 +38,21 @@ func RateLimit(rps float64, burst int, client *redis.Client) gin.HandlerFunc {
 	visitors := make(map[string]*visitor)
 
 	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
 		for {
-			time.Sleep(time.Minute)
-			mu.Lock()
-			for ip, v := range visitors {
-				if time.Since(v.lastSeen) > 3*time.Minute {
-					delete(visitors, ip)
+			select {
+			case <-ticker.C:
+				mu.Lock()
+				for ip, v := range visitors {
+					if time.Since(v.lastSeen) > 3*time.Minute {
+						delete(visitors, ip)
+					}
 				}
+				mu.Unlock()
+			case <-ctx.Done():
+				return
 			}
-			mu.Unlock()
 		}
 	}()
 
