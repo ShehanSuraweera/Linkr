@@ -1,7 +1,12 @@
-"use client"
+"use client";
 
-import { useMemo } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useMemo, useState } from "react";
+import {
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
+import type { ListLinksResponse } from "@/lib/types";
 import {
   AreaChart,
   Area,
@@ -12,34 +17,54 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-} from "recharts"
-import type { LinkStats } from "@/lib/types"
-import ClicksChart from "@/components/ClicksChart"
-import BreakdownList from "@/components/BreakdownList"
-import DonutChart from "@/components/DonutChart"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { RefreshCw } from "lucide-react"
+} from "recharts";
+import type { LinkStats } from "@/lib/types";
+import ClicksChart from "@/components/ClicksChart";
+import BreakdownList from "@/components/BreakdownList";
+import DonutChart from "@/components/DonutChart";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
-const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const DEVICE_ICONS: Record<string, string> = {
   desktop: "🖥️",
   mobile: "📱",
   tablet: "📟",
-}
+};
 
 function fmtNum(n: number): string {
-  return n.toLocaleString(undefined, { maximumFractionDigits: 1 })
+  return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
 interface Props {
-  code: string
-  initialStats?: LinkStats
+  code: string;
+  initialStats?: LinkStats;
 }
 
 export default function StatsContent({ code, initialStats }: Props) {
+  const queryClient = useQueryClient();
+
+  // Read is_active from the dashboard's ["links"] cache (populated when user came from dashboard).
+  // Runs once on mount — the user can't change link state from this page.
+  const [cachedIsActive] = useState<boolean | null>(() => {
+    const queries = queryClient.getQueriesData<InfiniteData<ListLinksResponse>>(
+      {
+        queryKey: ["links"],
+      },
+    );
+    for (const [, data] of queries) {
+      if (!data) continue;
+      for (const page of data.pages) {
+        const found = page.items.find((l) => l.short_code === code);
+        if (found !== undefined) return found.is_active;
+      }
+    }
+    return null;
+  });
+
   const {
     data: stats,
     isLoading,
@@ -50,52 +75,52 @@ export default function StatsContent({ code, initialStats }: Props) {
   } = useQuery<LinkStats>({
     queryKey: ["stats", code],
     queryFn: async () => {
-      const res = await fetch(`/api/links-proxy/${code}/stats`)
+      const res = await fetch(`/api/links-proxy/${code}/stats`);
       if (res.status === 401) {
-        window.location.replace("/api/auth/logout")
-        throw new Error("Session expired")
+        window.location.replace("/api/auth/logout");
+        throw new Error("Session expired");
       }
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
+        const body = await res.json().catch(() => ({}));
         throw Object.assign(new Error(body.error ?? "Failed to fetch stats"), {
           status: res.status,
-        })
+        });
       }
-      return res.json()
+      return res.json();
     },
     initialData: initialStats,
-    staleTime: 30_000,
-  })
+    staleTime: 0,
+  });
 
-  const daily = stats?.daily ?? []
+  const daily = stats?.daily ?? [];
 
   const avgClicksPerDay = useMemo(() => {
-    if (daily.length === 0) return 0
-    const total = daily.reduce((s, d) => s + d.count, 0)
-    return total / daily.length
-  }, [daily])
+    if (daily.length === 0) return 0;
+    const total = daily.reduce((s, d) => s + d.count, 0);
+    return total / daily.length;
+  }, [daily]);
 
   const peakDay = useMemo(() => {
-    if (daily.length === 0) return null
-    return daily.reduce((best, d) => (d.count > best.count ? d : best))
-  }, [daily])
+    if (daily.length === 0) return null;
+    return daily.reduce((best, d) => (d.count > best.count ? d : best));
+  }, [daily]);
 
   const dowData = useMemo(() => {
-    const counts = Array(7).fill(0) as number[]
+    const counts = Array(7).fill(0) as number[];
     daily.forEach((d) => {
-      const dow = new Date(d.day + "T00:00:00").getDay()
-      counts[dow] += d.count
-    })
-    return DOW_LABELS.map((name, i) => ({ name, clicks: counts[i] }))
-  }, [daily])
+      const dow = new Date(d.day + "T00:00:00").getDay();
+      counts[dow] += d.count;
+    });
+    return DOW_LABELS.map((name, i) => ({ name, clicks: counts[i] }));
+  }, [daily]);
 
   const cumulativeData = useMemo(() => {
-    let sum = 0
+    let sum = 0;
     return daily.map((d) => {
-      sum += d.count
-      return { day: d.day.slice(5), total: sum }
-    })
-  }, [daily])
+      sum += d.count;
+      return { day: d.day.slice(5), total: sum };
+    });
+  }, [daily]);
 
   if (isLoading) {
     return (
@@ -116,19 +141,36 @@ export default function StatsContent({ code, initialStats }: Props) {
         </div>
         <div className="h-48 bg-muted rounded-xl animate-pulse" />
       </div>
-    )
+    );
   }
 
   if (isError) {
-    const status = (error as { status?: number }).status
-    if (status === 404) return <p className="text-muted-foreground">Link not found.</p>
-    if (status === 403) return <p className="text-muted-foreground">You don&apos;t own this link.</p>
-    return <p className="text-destructive">Failed to load stats. Is the API running?</p>
+    const status = (error as { status?: number }).status;
+    if (status === 404)
+      return <p className="text-muted-foreground">Link not found.</p>;
+    if (status === 403)
+      return (
+        <p className="text-muted-foreground">You don&apos;t own this link.</p>
+      );
+    return (
+      <p className="text-destructive">
+        Failed to load stats. Is the API running?
+      </p>
+    );
   }
 
-  const deviceItems = (stats?.devices ?? []).map((d) => ({ name: d.device, count: d.count }))
-  const browserItems = (stats?.browsers ?? []).map((b) => ({ name: b.browser, count: b.count }))
-  const refererItems = (stats?.referers ?? []).map((r) => ({ name: r.domain, count: r.count }))
+  const deviceItems = (stats?.devices ?? []).map((d) => ({
+    name: d.device,
+    count: d.count,
+  }));
+  const browserItems = (stats?.browsers ?? []).map((b) => ({
+    name: b.browser,
+    count: b.count,
+  }));
+  const refererItems = (stats?.referers ?? []).map((r) => ({
+    name: r.domain,
+    count: r.count,
+  }));
 
   return (
     <div className="space-y-6">
@@ -137,20 +179,35 @@ export default function StatsContent({ code, initialStats }: Props) {
         <Card>
           <CardContent className="pt-5">
             <p className="text-sm text-muted-foreground mb-1">Short link</p>
-            <a
-              href={`${API_BASE}/${code}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary font-mono hover:underline break-all"
-            >
-              /{code}
-            </a>
+            <div className="flex justify-between items-center">
+              <a
+                href={`${API_BASE}/${code}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary font-mono hover:underline break-all"
+              >
+                /{code}
+              </a>
+              {cachedIsActive !== null && (
+                <div
+                  className={`inline-flex items-center gap-1 text-xs mt-2 ${cachedIsActive ? "text-green-600" : "text-muted-foreground"}`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${cachedIsActive ? "bg-green-500" : "bg-muted-foreground/40"}`}
+                  />
+                  {cachedIsActive ? "Active" : "Inactive"}
+                </div>
+              )}
+          
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-5">
             <p className="text-sm text-muted-foreground mb-1">Total clicks</p>
-            <p className="text-3xl font-bold">{stats?.total_clicks.toLocaleString()}</p>
+            <p className="text-3xl font-bold">
+              {stats?.total_clicks.toLocaleString()}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -164,8 +221,12 @@ export default function StatsContent({ code, initialStats }: Props) {
             <p className="text-sm text-muted-foreground mb-1">Peak day</p>
             {peakDay ? (
               <>
-                <p className="text-2xl font-bold">{peakDay.count.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{peakDay.day}</p>
+                <p className="text-2xl font-bold">
+                  {peakDay.count.toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {peakDay.day}
+                </p>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">No data yet</p>
@@ -178,7 +239,9 @@ export default function StatsContent({ code, initialStats }: Props) {
       <Card>
         <CardContent className="pt-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-medium text-muted-foreground">Clicks over time</h2>
+            <h2 className="text-sm font-medium text-muted-foreground">
+              Clicks over time
+            </h2>
             <Button
               variant="ghost"
               size="sm"
@@ -186,7 +249,9 @@ export default function StatsContent({ code, initialStats }: Props) {
               disabled={isRefetching}
               aria-label="Refresh stats"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isRefetching ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${isRefetching ? "animate-spin" : ""}`}
+              />
             </Button>
           </div>
           <ClicksChart daily={stats?.daily ?? []} />
@@ -197,19 +262,32 @@ export default function StatsContent({ code, initialStats }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card>
           <CardContent className="pt-5">
-            <p className="text-sm font-medium text-muted-foreground mb-4">Cumulative growth</p>
+            <p className="text-sm font-medium text-muted-foreground mb-4">
+              Cumulative growth
+            </p>
             {cumulativeData.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-10 text-center">No data yet</p>
+              <p className="text-sm text-muted-foreground py-10 text-center">
+                No data yet
+              </p>
             ) : (
               <ResponsiveContainer width="100%" height={185}>
                 <AreaChart data={cumulativeData}>
                   <defs>
-                    <linearGradient id="gradCumulative" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient
+                      id="gradCumulative"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
                       <stop offset="5%" stopColor="#e11d48" stopOpacity={0.2} />
                       <stop offset="95%" stopColor="#e11d48" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="hsl(var(--muted))"
+                  />
                   <XAxis
                     dataKey="day"
                     tick={{ fontSize: 11 }}
@@ -225,7 +303,10 @@ export default function StatsContent({ code, initialStats }: Props) {
                   />
                   <Tooltip
                     contentStyle={{ fontSize: 12 }}
-                    formatter={(v) => [(v as number).toLocaleString(), "Total clicks"]}
+                    formatter={(v) => [
+                      (v as number).toLocaleString(),
+                      "Total clicks",
+                    ]}
                   />
                   <Area
                     type="monotone"
@@ -243,9 +324,13 @@ export default function StatsContent({ code, initialStats }: Props) {
 
         <Card>
           <CardContent className="pt-5">
-            <p className="text-sm font-medium text-muted-foreground mb-4">Clicks by day of week</p>
+            <p className="text-sm font-medium text-muted-foreground mb-4">
+              Clicks by day of week
+            </p>
             {daily.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-10 text-center">No data yet</p>
+              <p className="text-sm text-muted-foreground py-10 text-center">
+                No data yet
+              </p>
             ) : (
               <ResponsiveContainer width="100%" height={185}>
                 <BarChart data={dowData} barCategoryGap="30%">
@@ -269,7 +354,10 @@ export default function StatsContent({ code, initialStats }: Props) {
                   />
                   <Tooltip
                     contentStyle={{ fontSize: 12 }}
-                    formatter={(v) => [(v as number).toLocaleString(), "Clicks"]}
+                    formatter={(v) => [
+                      (v as number).toLocaleString(),
+                      "Clicks",
+                    ]}
                   />
                   <Bar dataKey="clicks" fill="#e11d48" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -298,9 +386,9 @@ export default function StatsContent({ code, initialStats }: Props) {
 
       {/* Privacy notice */}
       <p className="text-xs text-muted-foreground text-center">
-        Analytics are aggregated and anonymised. Raw visitor signals (IP addresses, user agents) are
-        never stored.
+        Analytics are aggregated and anonymised. Raw visitor signals (IP
+        addresses, user agents) are never stored.
       </p>
     </div>
-  )
+  );
 }
