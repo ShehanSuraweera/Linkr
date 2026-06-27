@@ -74,8 +74,8 @@ func NewRouter(h Handlers, cfg RouterConfig, logger *slog.Logger, ready func() e
 		api.POST("/links", h.Link.Create)
 		api.GET("/links", h.Link.List)
 		api.GET("/links/:code/stats", h.Link.GetStats)
-		api.PATCH("/links/:id", h.Link.Patch)
-		api.DELETE("/links/:id", h.Link.Delete)
+		api.PATCH("/links/:code", h.Link.Patch)
+		api.DELETE("/links/:code", h.Link.Delete)
 		api.GET("/analytics/overview", h.Analytics.Overview)
 	}
 

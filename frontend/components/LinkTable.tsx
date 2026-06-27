@@ -217,7 +217,7 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
     // optimistic
     patchAllPages((item) => (item.id === link.id ? { ...item, is_active: next } : item))
     try {
-      const res = await fetch(`/api/links/${link.id}`, {
+      const res = await fetch(`/api/links/${link.short_code}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_active: next }),
@@ -234,13 +234,13 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
     }
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (link: LinkType) => {
     if (deletingId !== null) return
-    setDeletingId(id)
+    setDeletingId(link.id)
     try {
-      const res = await fetch(`/api/links/${id}`, { method: "DELETE" })
+      const res = await fetch(`/api/links/${link.short_code}`, { method: "DELETE" })
       if (!res.ok) throw new Error("Failed to delete link")
-      patchAllPages((item) => (item.id === id ? null : item))
+      patchAllPages((item) => (item.id === link.id ? null : item))
     } catch {
       setMutationError("Failed to delete link.")
     } finally {
@@ -426,7 +426,7 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
                   copiedId={copiedId}
                   onCopy={copyLink}
                   onToggle={(link) => setPendingAction({ type: "toggle", link })}
-                  onDelete={(id) => setPendingAction({ type: "delete", link: links.find((l) => l.id === id)! })}
+                  onDelete={(link) => setPendingAction({ type: "delete", link })}
                   isToggling={togglingId === link.id}
                   isDeleting={deletingId === link.id}
                 />
@@ -456,7 +456,7 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
                       copiedId={copiedId}
                       onCopy={copyLink}
                       onToggle={(link) => setPendingAction({ type: "toggle", link })}
-                      onDelete={(id) => setPendingAction({ type: "delete", link: links.find((l) => l.id === id)! })}
+                      onDelete={(link) => setPendingAction({ type: "delete", link })}
                       isToggling={togglingId === link.id}
                       isDeleting={deletingId === link.id}
                       onNavigate={() => router.push(`/links/${link.short_code}`)}
@@ -499,7 +499,7 @@ export default function LinkTable({ initialLinks, initialHasMore, initialNextCur
         variant={pendingAction?.type === "delete" ? "destructive" : "default"}
         onConfirm={() => {
           if (!pendingAction) return
-          if (pendingAction.type === "delete") handleDelete(pendingAction.link.id)
+          if (pendingAction.type === "delete") handleDelete(pendingAction.link)
           else toggleActive(pendingAction.link)
         }}
       />
@@ -522,7 +522,7 @@ function LinkCard({
   copiedId: number | null
   onCopy: (code: string, id: number) => void
   onToggle: (link: LinkType) => void
-  onDelete: (id: number) => void
+  onDelete: (link: LinkType) => void
   isToggling: boolean
   isDeleting: boolean
 }) {
@@ -594,7 +594,7 @@ function LinkCard({
             <Power className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(link.id) }}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(link) }}
             disabled={isDeleting}
             title="Delete"
             className="p-1 rounded-md transition-colors text-muted-foreground hover:text-destructive hover:bg-muted"
@@ -623,7 +623,7 @@ function TableRowWithActions({
   copiedId: number | null
   onCopy: (code: string, id: number) => void
   onToggle: (link: LinkType) => void
-  onDelete: (id: number) => void
+  onDelete: (link: LinkType) => void
   isToggling: boolean
   isDeleting: boolean
   onNavigate: () => void
@@ -683,7 +683,7 @@ function TableRowWithActions({
             <Power className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onDelete(link.id) }}
+            onClick={(e) => { e.stopPropagation(); onDelete(link) }}
             disabled={isDeleting}
             title="Delete"
             className="p-1.5 rounded-md transition-colors text-muted-foreground hover:text-destructive hover:bg-muted"

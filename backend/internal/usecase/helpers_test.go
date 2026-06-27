@@ -48,43 +48,31 @@ func (f *fakeLinkStore) GetByCode(_ context.Context, code string) (domain.Link, 
 	return l, nil
 }
 
-func (f *fakeLinkStore) GetByIDAndUser(_ context.Context, id, _ int64) (domain.Link, error) {
-	for _, l := range f.links {
-		if l.ID == id {
-			return l, nil
-		}
-	}
-	return domain.Link{}, domain.ErrNotFound
-}
-
 func (f *fakeLinkStore) List(_ context.Context, _ int64, _ time.Time, _ int64, _ int32, _ string) ([]domain.LinkSummary, bool, error) {
 	return nil, false, nil
 }
 
-func (f *fakeLinkStore) Update(_ context.Context, id, _ int64, isActive *bool, setExpiresAt bool, expiresAt *time.Time) (domain.Link, error) {
-	for code, l := range f.links {
-		if l.ID == id {
-			if isActive != nil {
-				l.IsActive = *isActive
-			}
-			if setExpiresAt {
-				l.ExpiresAt = expiresAt
-			}
-			f.links[code] = l
-			return l, nil
-		}
+func (f *fakeLinkStore) Update(_ context.Context, code string, _ int64, isActive *bool, setExpiresAt bool, expiresAt *time.Time) (domain.Link, error) {
+	l, ok := f.links[code]
+	if !ok {
+		return domain.Link{}, domain.ErrNotFound
 	}
-	return domain.Link{}, domain.ErrNotFound
+	if isActive != nil {
+		l.IsActive = *isActive
+	}
+	if setExpiresAt {
+		l.ExpiresAt = expiresAt
+	}
+	f.links[code] = l
+	return l, nil
 }
 
-func (f *fakeLinkStore) SoftDelete(_ context.Context, id, _ int64) error {
-	for code, l := range f.links {
-		if l.ID == id {
-			delete(f.links, code)
-			return nil
-		}
+func (f *fakeLinkStore) SoftDelete(_ context.Context, code string, _ int64) error {
+	if _, ok := f.links[code]; !ok {
+		return domain.ErrNotFound
 	}
-	return domain.ErrNotFound
+	delete(f.links, code)
+	return nil
 }
 
 // ── fakeClickStore ────────────────────────────────────────────────────────────

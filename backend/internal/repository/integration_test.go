@@ -104,7 +104,7 @@ func TestLinkRepo_CreateListDelete(t *testing.T) {
 		t.Error("expected hasMore=false for single link")
 	}
 
-	if err := linkRepo.SoftDelete(ctx, link.ID, user.ID); err != nil {
+	if err := linkRepo.SoftDelete(ctx, code, user.ID); err != nil {
 		t.Fatalf("SoftDelete: %v", err)
 	}
 

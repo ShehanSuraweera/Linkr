@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -57,6 +58,15 @@ func (r *LinkRepo) GetByCode(ctx context.Context, code string) (domain.Link, err
 	return link, nil
 }
 
+// escapeLike escapes LIKE/ILIKE metacharacters so user-supplied search terms
+// are matched literally. PostgreSQL uses backslash as the default escape char.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
 // List returns links for userID using keyset pagination over (created_at DESC, id DESC).
 // Returns LinkSummary (entity + aggregate click count) to avoid N+1 stats queries.
 // Pass zero values for cursorCreatedAt/cursorID to get the first page.
@@ -66,6 +76,8 @@ func (r *LinkRepo) List(ctx context.Context, userID int64, cursorCreatedAt time.
 		cursorCreatedAt = time.Now().Add(time.Second) // slightly future so first row is included
 		cursorID = 1<<62 - 1                          // max int64-ish
 	}
+
+	escapedSearch := escapeLike(search)
 
 	rows, err := r.pool.Query(ctx,
 		`SELECT l.id, l.short_code, l.original_url, l.user_id, l.created_at, l.expires_at, l.is_active, l.deleted_at,
@@ -79,7 +91,7 @@ func (r *LinkRepo) List(ctx context.Context, userID int64, cursorCreatedAt time.
 		 GROUP BY l.id, l.short_code, l.original_url, l.user_id, l.created_at, l.expires_at, l.is_active, l.deleted_at
 		 ORDER BY l.created_at DESC, l.id DESC
 		 LIMIT $5`,
-		userID, cursorCreatedAt, cursorID, search, limit+1)
+		userID, cursorCreatedAt, cursorID, escapedSearch, limit+1)
 	if err != nil {
 		return nil, false, fmt.Errorf("list links: %w", err)
 	}
@@ -95,15 +107,15 @@ func (r *LinkRepo) List(ctx context.Context, userID int64, cursorCreatedAt time.
 	return links, hasMore, nil
 }
 
-func (r *LinkRepo) Update(ctx context.Context, id, userID int64, isActive *bool, setExpiresAt bool, expiresAt *time.Time) (domain.Link, error) {
+func (r *LinkRepo) Update(ctx context.Context, code string, userID int64, isActive *bool, setExpiresAt bool, expiresAt *time.Time) (domain.Link, error) {
 	rows, err := r.pool.Query(ctx,
 		`UPDATE links
 		 SET
 		     is_active  = COALESCE($3, is_active),
 		     expires_at = CASE WHEN $4 THEN $5 ELSE expires_at END
-		 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+		 WHERE short_code = $1 AND user_id = $2 AND deleted_at IS NULL
 		 RETURNING id, short_code, original_url, user_id, created_at, expires_at, is_active, deleted_at`,
-		id, userID, isActive, setExpiresAt, expiresAt)
+		code, userID, isActive, setExpiresAt, expiresAt)
 	if err != nil {
 		return domain.Link{}, fmt.Errorf("update link: %w", err)
 	}
@@ -117,10 +129,10 @@ func (r *LinkRepo) Update(ctx context.Context, id, userID int64, isActive *bool,
 	return link, nil
 }
 
-func (r *LinkRepo) SoftDelete(ctx context.Context, id, userID int64) error {
+func (r *LinkRepo) SoftDelete(ctx context.Context, code string, userID int64) error {
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE links SET deleted_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
-		id, userID)
+		`UPDATE links SET deleted_at = now() WHERE short_code = $1 AND user_id = $2 AND deleted_at IS NULL`,
+		code, userID)
 	if err != nil {
 		return fmt.Errorf("delete link: %w", err)
 	}

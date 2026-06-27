@@ -245,20 +245,16 @@ type PatchLinkRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id    path      int             true  "Link ID"
+// @Param        code  path      string          true  "Short code"
 // @Param        body  body      PatchLinkRequest  true  "Fields to update"
 // @Success      200   {object}  LinkResponse
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
 // @Failure      404   {object}  ErrorResponse
-// @Router       /api/links/{id} [patch]
+// @Router       /api/links/{code} [patch]
 func (h *LinkHandler) Patch(c *gin.Context) {
 	userID := middleware.UserIDFrom(c)
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	code := c.Param("code")
 
 	var req PatchLinkRequest
 	if !bindJSON(c, &req) {
@@ -282,7 +278,7 @@ func (h *LinkHandler) Patch(c *gin.Context) {
 	}
 
 	link, err := h.uc.Update(c.Request.Context(), usecase.UpdateLinkInput{
-		ID:           id,
+		Code:         code,
 		UserID:       userID,
 		IsActive:     req.IsActive,
 		SetExpiresAt: setExpiresAt,
@@ -303,21 +299,16 @@ func (h *LinkHandler) Patch(c *gin.Context) {
 // @Description  Soft-deletes a link owned by the authenticated user.
 // @Tags         links
 // @Security     BearerAuth
-// @Param        id  path  int  true  "Link ID"
+// @Param        code  path  string  true  "Short code"
 // @Success      204  "No content"
 // @Failure      401  {object}  ErrorResponse
 // @Failure      404  {object}  ErrorResponse
-// @Router       /api/links/{id} [delete]
+// @Router       /api/links/{code} [delete]
 func (h *LinkHandler) Delete(c *gin.Context) {
 	userID := middleware.UserIDFrom(c)
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	code := c.Param("code")
 
-	code, err := h.uc.Delete(c.Request.Context(), id, userID)
-	if err != nil {
+	if err := h.uc.Delete(c.Request.Context(), code, userID); err != nil {
 		respondError(c, err)
 		return
 	}

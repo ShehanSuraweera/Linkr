@@ -18,10 +18,9 @@ import (
 type LinkStore interface {
 	Create(ctx context.Context, shortCode, originalURL string, userID int64, expiresAt *time.Time) (domain.Link, error)
 	GetByCode(ctx context.Context, code string) (domain.Link, error)
-	GetByIDAndUser(ctx context.Context, id, userID int64) (domain.Link, error)
 	List(ctx context.Context, userID int64, cursorCreatedAt time.Time, cursorID int64, limit int32, search string) ([]domain.LinkSummary, bool, error)
-	Update(ctx context.Context, id, userID int64, isActive *bool, setExpiresAt bool, expiresAt *time.Time) (domain.Link, error)
-	SoftDelete(ctx context.Context, id, userID int64) error
+	Update(ctx context.Context, code string, userID int64, isActive *bool, setExpiresAt bool, expiresAt *time.Time) (domain.Link, error)
+	SoftDelete(ctx context.Context, code string, userID int64) error
 }
 
 // ClickStore is the read-only analytics interface required by LinkUsecase.
@@ -43,7 +42,7 @@ type CreateLinkInput struct {
 // UpdateLinkInput carries the inputs for patching a link.
 // SetExpiresAt distinguishes "absent" (don't change) from "null" (clear expiry).
 type UpdateLinkInput struct {
-	ID           int64
+	Code         string
 	UserID       int64
 	IsActive     *bool      // nil → don't change
 	SetExpiresAt bool       // true → write ExpiresAt (even if nil)
@@ -126,19 +125,12 @@ func (uc *LinkUsecase) Update(ctx context.Context, in UpdateLinkInput) (domain.L
 	if in.SetExpiresAt && in.ExpiresAt != nil && in.ExpiresAt.Before(time.Now()) {
 		return domain.Link{}, newInputErr("expires_at must be in the future")
 	}
-	return uc.links.Update(ctx, in.ID, in.UserID, in.IsActive, in.SetExpiresAt, in.ExpiresAt)
+	return uc.links.Update(ctx, in.Code, in.UserID, in.IsActive, in.SetExpiresAt, in.ExpiresAt)
 }
 
-// Delete soft-deletes a link owned by userID and returns its short code for cache invalidation.
-func (uc *LinkUsecase) Delete(ctx context.Context, id, userID int64) (string, error) {
-	link, err := uc.links.GetByIDAndUser(ctx, id, userID)
-	if err != nil {
-		return "", err
-	}
-	if err := uc.links.SoftDelete(ctx, id, userID); err != nil {
-		return "", err
-	}
-	return link.ShortCode, nil
+// Delete soft-deletes a link owned by userID.
+func (uc *LinkUsecase) Delete(ctx context.Context, code string, userID int64) error {
+	return uc.links.SoftDelete(ctx, code, userID)
 }
 
 // GetStats returns click analytics for a link, enforcing that the caller owns it.

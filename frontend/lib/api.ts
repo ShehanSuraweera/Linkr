@@ -79,19 +79,19 @@ export async function createLink(payload: {
 }
 
 export async function updateLink(
-  id: number,
+  code: string,
   payload: { is_active?: boolean; expires_at?: string | null }
 ): Promise<Link> {
   const token = await getToken()
-  return apiFetch<Link>(`/api/links/${id}`, {
+  return apiFetch<Link>(`/api/links/${code}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   }, token)
 }
 
-export async function deleteLink(id: number): Promise<void> {
+export async function deleteLink(code: string): Promise<void> {
   const token = await getToken()
-  const res = await fetch(`${API_URL}/api/links/${id}`, {
+  const res = await fetch(`${API_URL}/api/links/${code}`, {
     method: "DELETE",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
